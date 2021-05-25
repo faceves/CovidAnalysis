@@ -29,3 +29,4 @@ project/target/
 .bloop/
 .metals/
 .vscode/
+src/main/scala/loadpath/LoadPath.scala
