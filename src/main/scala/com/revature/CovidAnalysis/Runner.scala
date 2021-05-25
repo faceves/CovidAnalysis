@@ -15,7 +15,7 @@ object Runner {
     import spark.implicits._
     Logger.getLogger("org").setLevel(Level.ERROR)
 
-    val covid_analysis_DB = spark.read
+    val covid_accum_DB = spark.read
       .option("header", true)
       .option("delimiter",",")
       .format("csv")
@@ -57,7 +57,7 @@ object Runner {
       .load(LoadPath.hdfs_path + "time_series_covid_19_recovered.csv")
       .toDF()
 
-    covid_analysis_DB.show()
+    covid_accum_DB.show()
     covid_confirmed_US_DB.show()
     covid_confirmed_DB.show()
     covid_deaths_DB.show()
