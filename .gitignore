@@ -1,4 +1,3 @@
-/build.sbt
 tweetstream-*
 *.parquet
 *.class
