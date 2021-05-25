@@ -5,7 +5,14 @@ import org.apache.spark.sql.SparkSession
 import loadpath.LoadPath
 import org.apache.spark.sql.sources.And
 import org.apache.spark.sql.functions._
+
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions.{array, col, desc, explode, lit, struct}
 import org.apache.spark.sql.types.IntegerType
+
+import java.text.SimpleDateFormat
+import java.util.{Calendar, Date}
+import scala.reflect.internal.util.NoPosition.show
 
 object Runner {
 
@@ -74,9 +81,26 @@ object Runner {
     covid_recovered_DB.show()
     **/
 
+    var stateName = "New Hampshire"
+    var date = "11/1/20"
+    var stateDF = covid_confirmed_US_DB.filter('Province_State===stateName)
+    changeOverTime(stateDF, date, 14).show
+
     spark.close()
   }
 
-
+  //do not use with covid_accum_DB
+  def changeOverTime(df: DataFrame, startDate: String, numOfDays: Int) ={
+    val format = new SimpleDateFormat("M/d/yy")
+    val date = format.parse(startDate)
+    val c = Calendar.getInstance()
+    c.setTime(date)
+    c.add(Calendar.DATE, numOfDays)
+    val dt = format.format(c.getTime())
+    var df_mod = df.select(df("Combined_Key"), df(startDate).cast(IntegerType)).orderBy(desc(startDate))
+    val df_temp = df.select(df("Combined_Key").as("_n_"), df(dt).cast(IntegerType)).orderBy(desc(dt))
+    df_mod = df_mod.join(df_temp, df_temp("_n_")===df_mod("Combined_Key"), "inner").drop("_n_")
+    df_mod.withColumn("delta",df_mod(dt)-df_mod(startDate))
+  }
 
 }
