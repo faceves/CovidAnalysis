@@ -3,6 +3,9 @@ package com.revature.CovidAnalysis
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SparkSession
 import loadpath.LoadPath
+import org.apache.spark.sql.sources.And
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.IntegerType
 
 object Runner {
 
@@ -57,13 +60,19 @@ object Runner {
       .load(LoadPath.hdfs_path + "time_series_covid_19_recovered.csv")
       .toDF()
 
+    val california = covid_accum_DB.where($"Country/Region" === "US" && $"Province/State" === "California")
+      .select($"Deaths".cast(IntegerType), $"ObservationDate").orderBy(desc("Deaths"))
+    california.show()
+
+
+    /**
     covid_accum_DB.show()
     covid_confirmed_US_DB.show()
     covid_confirmed_DB.show()
     covid_deaths_DB.show()
     covid_deaths_US_DB.show()
     covid_recovered_DB.show()
-
+    **/
 
     spark.close()
   }
