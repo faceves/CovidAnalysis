@@ -30,3 +30,5 @@ project/target/
 .metals/
 .vscode/
 src/main/scala/loadpath/LoadPath.scala
+
+.bsp
