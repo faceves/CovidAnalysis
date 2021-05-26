@@ -1,4 +1,4 @@
-#Instructions:
+# Instructions:
 - Create a Spark Application that process Covid data.
 
 - Your project  should involve some analysis of covid data(Every concept of spark from rdd, dataframes, sql, dataset and 
@@ -7,7 +7,7 @@ observed as part of data collectivley and how can WHO make use of these trends t
 
 - Lets the P2 Demo, have presentation with screen shots and practical demo for at least one of your trends.
 
-##Datasets:
+## Datasets:
 Columns and our understanding of them.
 
 covid_19_data.csv
@@ -37,7 +37,7 @@ time_series_covid_19_confirmed_US.csv
     Dates ...                           1/22/20 to 5/2/21
 
 
-**time_series_covid_19_deaths_US.csv**
+time_series_covid_19_deaths_US.csv
 ------------------------------------------------------------------
     Same as time_series_covid_19_confirmed_US.csv buit with an extra column:
     Population                          " "
@@ -52,7 +52,7 @@ time_series_covid_19_confirmed.csv time_series_covid_19_deaths.csv time_series_c
     Dates                               1/22/20 to 5/2/21
    
 
-##Trend Brainstorming:
+## Trend Brainstorming:
 - Geographical Location:
     - Urban vs Rural vs Remote
 - Important Dates at Geographical Locations:
@@ -75,7 +75,7 @@ time_series_covid_19_confirmed.csv time_series_covid_19_deaths.csv time_series_c
         - Mask Mandates
     - Geographical Popularity during Seasons
     
-##Trends:
+## Trends:
 - Causes that affect Outcomes
     1. U.S vs Countries
        1. Season Spikes
