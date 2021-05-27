@@ -1,18 +1,20 @@
 package com.revature.CovidAnalysis
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import loadpath.LoadPath
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.sources.And
 import org.apache.spark.sql.functions._
-
-import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.{array, col, desc, explode, lit, struct}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{DateType, IntegerType, TimestampType}
 
 import java.text.SimpleDateFormat
+import java.util
 import java.util.{Calendar, Date}
 import scala.reflect.internal.util.NoPosition.show
+
+
 
 object Runner {
 
@@ -24,6 +26,7 @@ object Runner {
       .getOrCreate()
     import spark.implicits._
     Logger.getLogger("org").setLevel(Level.ERROR)
+
 
     val covid_accum_DB = spark.read
       .option("header", true)
@@ -67,10 +70,11 @@ object Runner {
       .load(LoadPath.hdfs_path + "time_series_covid_19_recovered.csv")
       .toDF()
 
+    /**
     val california = covid_accum_DB.where($"Country/Region" === "US" && $"Province/State" === "California")
       .select($"Deaths".cast(IntegerType), $"ObservationDate").orderBy(desc("Deaths"))
     california.show()
-
+    **/
 
     /**
     covid_accum_DB.show()
@@ -81,10 +85,14 @@ object Runner {
     covid_recovered_DB.show()
     **/
 
+      /**
     var stateName = "New Hampshire"
     var date = "11/1/20"
     var stateDF = covid_confirmed_US_DB.filter('Province_State===stateName)
     changeOverTime(stateDF, date, 14).show
+    **/
+    val ds = firstOccurence(covid_accum_DB, "Confirmed", "Province/State")
+    ds.show()
 
     spark.close()
   }
@@ -101,6 +109,41 @@ object Runner {
     val df_temp = df.select(df("Combined_Key").as("_n_"), df(dt).cast(IntegerType)).orderBy(desc(dt))
     df_mod = df_mod.join(df_temp, df_temp("_n_")===df_mod("Combined_Key"), "inner").drop("_n_")
     df_mod.withColumn("delta",df_mod(dt)-df_mod(startDate))
+  }
+
+
+  /**
+   * @param df, occurTypeCol = "Deaths", occurByCol = "Country/Region"
+   * */
+
+  def firstOccurence(df: DataFrame, occurTypeCol: String, occurByCol: String): DataFrame = {
+    /**
+    val date_format = new SimpleDateFormat("M/d/yy")
+    val date = date_format.parse()
+    val calendar = Calendar.getInstance()
+    calendar.setTime(startDate)
+    **/
+
+
+
+
+    val filteredDF =
+      df.where(s"$occurTypeCol > 0")
+      .withColumn("Date",to_date(df("ObservationDate"), "MM/dd/yy"))
+
+    val window = Window.partitionBy(occurByCol).orderBy("Date")
+    val firstOccurDF =
+        filteredDF.withColumn("rowNum", row_number().over(window))
+        .where("rowNum == 1")
+    firstOccurDF
+    /**
+    val dfTop = df.orderBy(occurTypeCol)
+      .withColumn("rowNum", row_number().over(window)).where("rowNum == 1")
+      .select(occurByCol,occurTypeCol)
+      dfTop.show()
+    df
+    **/
+
   }
 
 }
