@@ -234,7 +234,6 @@ object Runner {
       .withColumn("Caught Increment", dfx.col("Confirmed").cast(LongType))
       .withColumn("Dead Increment", dfx.col("Confirmed").cast(LongType))
       .withColumn("Revived Increment", dfx.col("Confirmed").cast(LongType)).rdd
-    localRDD.groupBy(col("Country/Region")).
   }
 
 }
