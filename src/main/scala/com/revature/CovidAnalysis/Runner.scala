@@ -1,8 +1,9 @@
 package com.revature.CovidAnalysis
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{Column, SparkSession}
+import org.apache.spark.sql.{Column, Row, SparkSession}
 import loadpath.LoadPath
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.col
 //import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
 import org.apache.spark.sql.sources._
@@ -87,7 +88,12 @@ object Runner {
     covid_recovered_DB.show()
     **/
 
-    spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0)
+    //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
+    latestGrand(covid_accum_DB, "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
+    latestSub(covid_deaths_DB, "5/2/21") //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
+
+    //covid_accum_DB.select("*").where(col("ObservationDate") === "05/02/2021" && col("Country/Region").like("U%S%")).show
+
 
     //val joina = trueTotalDeaths.withColumnRenamed("sum(Deaths)","Deaths").join(trueTotalRecovered,Seq("Country/Region"), "Left").withColumnRenamed("sum(Recovered)", "Recovered") //Unite Deaths and Recoveries
     //val joinb = joina.join(trueTotalConfirmed, Seq("Country/Region"), "Left").withColumnRenamed("sum(Confirmed)","Confirmed")   //Unite Deaths, Recoveries and Confirmations
@@ -175,7 +181,7 @@ object Runner {
   }
 
 
-
+  //Modification on Tim's Change Over Time Method, to output different dates based on input dates and spread
   def twoWeekCatcher(dfx:DataFrame, start:String, spread:Int):String={
     var startDate=""
     var pattern = ""
@@ -197,5 +203,26 @@ object Runner {
       val dt = format.format(c.getTime())
       dt
   }
+
+  def latestGrand(dfx:DataFrame, target:String):Unit={
+    val dateTarget = twoWeekCatcher(dfx, target, 0)
+
+    val dfxOne = dfx.select("*").where(col("ObservationDate") === dateTarget)
+    val dfxPrint= dfxOne.select("*")
+        .groupBy("Country/Region")
+        .agg(sum("Confirmed").as("Total Confirmations"), sum("Deaths").as("Total Deaths"), sum("Recovered").as("Total Recoveries"))
+        .orderBy(desc("Total Confirmations"))
+        .show(50,false)
+  }
+
+  def latestSub(dfx:DataFrame, target:String):Unit={
+    val dateTarget = twoWeekCatcher(dfx, target, 0)
+    val dfxOne = dfx.select("Country/Region", dateTarget)
+      .groupBy("Country/Region")
+      .agg(sum(dateTarget).as("Daily Tally"))
+      .orderBy(desc("Daily Tally"))
+      .show(50,false)
+  }
+
 
 }
