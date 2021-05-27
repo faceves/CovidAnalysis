@@ -43,7 +43,7 @@ time_series_covid_19_deaths_US.csv
     Population                          " "
 
 
-time_series_covid_19_confirmed.csv time_series_covid_19_deaths.csv time_series_covid_19_recovered.csv
+time_series_covid_19_confirmed.csv,  time_series_covid_19_deaths.csv,  time_series_covid_19_recovered.csv
 ------------------------------------------------------------------
     Province/State                      " "
     Country/Region                      " "

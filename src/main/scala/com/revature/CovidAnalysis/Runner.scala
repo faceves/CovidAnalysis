@@ -1,7 +1,7 @@
 package com.revature.CovidAnalysis
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{Column, Dataset, Encoders, Row, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, Row, SparkSession, DataFrame, Dataset}
 import loadpath.LoadPath
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.col
@@ -9,15 +9,22 @@ import org.apache.spark.sql.functions.col
 import java.beans.Encoder
 //import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.sources.And
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types._
 
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions.{array, col, desc, explode, lit, struct}
+import org.apache.spark.sql.types.{DateType, IntegerType, TimestampType}
+import org.apache.spark.sql.{Encoder, Encoders}
 
 import java.text.SimpleDateFormat
+import java.util
 import java.util.{Calendar, Date}
 import scala.reflect.internal.util.NoPosition.show
+
 
 object Runner {
 
@@ -27,8 +34,12 @@ object Runner {
       .appName("Covid Analysis")
       .master("local[*]")
       .getOrCreate()
+
     import spark.implicits._
+
     Logger.getLogger("org").setLevel(Level.ERROR)
+
+    //implicit val enc: Encoder[CovidAccum] = Encoders.product[CovidAccum]
 
     val covid_accum_DB = spark.read
       .option("header", true)
@@ -36,6 +47,9 @@ object Runner {
       .format("csv")
       .load(LoadPath.hdfs_path + "covid_19_data.csv")
       .toDF()
+
+
+    //implicit val enc: Encoder[CovidAccum] = Encoders.product[CovidAccum]
 
     val covid_confirmed_DB = spark.read
       .option("header", true)
@@ -72,14 +86,12 @@ object Runner {
       .load(LoadPath.hdfs_path + "time_series_covid_19_recovered.csv")
       .toDF()
 
+    val filteredDF =
+      covid_accum_DB.where($"Confirmed">0)
     //val california = covid_accum_DB.where($"Country/Region" === "US" && $"Province/State" === "California")
     //  .select($"Deaths".cast(IntegerType), $"ObservationDate").orderBy(desc("Deaths"))
     //california.show()
 
-    //val russianConfirmation = covid_analysis_DB.filter($"Country/Region" === "Russia").select($"Country/Region", $"Deaths".cast(IntegerType)).groupBy("Country/Region").sum("Deaths")
-    val trueTotalDeaths = covid_accum_DB.select($"Country/Region", $"Deaths".cast(LongType)).groupBy("Country/Region").sum("Deaths") //tally up Casualties by country
-    val trueTotalConfirmed = covid_accum_DB.select($"Country/Region", $"Confirmed".cast(LongType)).groupBy("Country/Region").sum("Confirmed")//tally up Confirmations by country
-    val trueTotalRecovered = covid_accum_DB.select($"Country/Region", $"Recovered".cast(LongType)).groupBy("Country/Region").sum("Recovered") //tally up Recoveries by country
 
     /**
     covid_accum_DB.show()
@@ -113,6 +125,9 @@ object Runner {
 
     //val FiveMostRecoveries = ratio.orderBy(desc("Decimal Recoveries")).show(5)
     //val FiveLeastRecoveries = ratio.orderBy(asc("Decimal Recoveries")).show(5)
+    val dt = firstOccurrence(covid_accum_DB,"Deaths","Province/State")
+    dt.show()
+
 
     spark.close()
   }
@@ -234,6 +249,26 @@ object Runner {
       .withColumn("Caught Increment", dfx.col("Confirmed").cast(LongType))
       .withColumn("Dead Increment", dfx.col("Confirmed").cast(LongType))
       .withColumn("Revived Increment", dfx.col("Confirmed").cast(LongType)).rdd
+  }
+
+
+  /**
+   * @param df, occurTypeCol = "Deaths", occurByCol = "Country/Region"
+   * */
+
+  def firstOccurrence(df: DataFrame, occurTypeCol: String, occurByCol: String): DataFrame = {
+
+    val filteredDF =
+      df.where(s"$occurTypeCol > 0")
+      .withColumn("Date",to_date(df("ObservationDate"), "MM/dd/yy"))
+
+    val window = Window.partitionBy(occurByCol).orderBy("Date")
+    val firstOccurDF =
+        filteredDF.withColumn("rowNum", row_number().over(window))
+          .where("rowNum == 1" )
+          .drop("Date","rowNum")
+    firstOccurDF
+
   }
 
 }
