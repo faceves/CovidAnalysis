@@ -1,10 +1,12 @@
 package com.revature.CovidAnalysis
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{Column, Row, SparkSession}
+import org.apache.spark.sql.{Column, Dataset, Encoders, Row, SparkSession}
 import loadpath.LoadPath
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.functions.col
+
+import java.beans.Encoder
 //import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.functions._
@@ -89,9 +91,9 @@ object Runner {
     **/
 
     //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
-    latestGrand(covid_accum_DB, "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
-    latestSub(covid_deaths_DB, "5/2/21") //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
-
+    latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
+    latestValueForSubTables(covid_deaths_DB, "Country/Region", "5/2/21") //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
+    latestValueForSubTables(covid_confirmed_DB, "Province/State", "5/2/21")
     //covid_accum_DB.select("*").where(col("ObservationDate") === "05/02/2021" && col("Country/Region").like("U%S%")).show
 
 
@@ -204,23 +206,23 @@ object Runner {
       dt
   }
 
-  def latestGrand(dfx:DataFrame, target:String):Unit={
-    val dateTarget = twoWeekCatcher(dfx, target, 0)
-
+  def latestValuesForAccumulatedTable(dfx:DataFrame, targetColumn:String, targetDate:String):Unit={
+    val dateTarget = twoWeekCatcher(dfx, targetDate, 0)
     val dfxOne = dfx.select("*").where(col("ObservationDate") === dateTarget)
     val dfxPrint= dfxOne.select("*")
-        .groupBy("Country/Region")
+        .groupBy(targetColumn)
         .agg(sum("Confirmed").as("Total Confirmations"), sum("Deaths").as("Total Deaths"), sum("Recovered").as("Total Recoveries"))
-        .orderBy(desc("Total Confirmations"))
+        .orderBy(desc("Total Deaths"))
         .show(50,false)
   }
 
-  def latestSub(dfx:DataFrame, target:String):Unit={
-    val dateTarget = twoWeekCatcher(dfx, target, 0)
-    val dfxOne = dfx.select("Country/Region", dateTarget)
-      .groupBy("Country/Region")
-      .agg(sum(dateTarget).as("Daily Tally"))
-      .orderBy(desc("Daily Tally"))
+  def latestValueForSubTables(dfx:DataFrame, targetColumn:String, targetDate:String):Unit={
+    val dateTarget = twoWeekCatcher(dfx, targetDate, 0)
+    val dfxOne = dfx.select(col(targetColumn).as("key"), col(dateTarget).as("value"))
+      .groupBy("key")
+      .agg(sum("value").as("value"))
+      .orderBy(desc("value"))
+      .as[StepShell](Encoders.product[StepShell])
       .show(50,false)
   }
 
