@@ -3,6 +3,7 @@ package com.revature.CovidAnalysis
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import loadpath.LoadPath
+import org.apache.spark.sql.catalyst.expressions.Or
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.sources.And
 import org.apache.spark.sql.functions._
@@ -80,18 +81,21 @@ object Runner {
       covid_accum_DB.where($"Confirmed">0)
 
 
-    /**
+
     covid_accum_DB.show()
     covid_confirmed_US_DB.show()
     covid_confirmed_DB.show()
     covid_deaths_DB.show()
     covid_deaths_US_DB.show()
     covid_recovered_DB.show()
-    **/
 
-    val dt = firstOccurrence(covid_accum_DB,"Deaths","Province/State")
-    dt.show()
 
+    val dt = firstOccurrence(covid_accum_DB,"Confirmed","Province/State")
+    val california = dt
+      .where($"Country/Region" === "US")
+      .where($"Province/State".like("%California%")
+        || $"Province/State".like("%CA%"))
+    california.show(58, false)
     spark.close()
   }
 
@@ -128,5 +132,7 @@ object Runner {
     firstOccurDF
 
   }
+
+
 
 }
