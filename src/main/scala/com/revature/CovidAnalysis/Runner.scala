@@ -94,6 +94,8 @@ object Runner {
     latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
     latestValueForSubTables(covid_deaths_DB, "Country/Region", "5/2/21") //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
     latestValueForSubTables(covid_confirmed_DB, "Province/State", "5/2/21")
+      //we should JUST go by country, because all the undocumented provinces/states across countries will get lumped together
+
     //covid_accum_DB.select("*").where(col("ObservationDate") === "05/02/2021" && col("Country/Region").like("U%S%")).show
 
 
@@ -226,5 +228,13 @@ object Runner {
       .show(50,false)
   }
 
+  //find the difference of 'deaths/recoveries/confirms' between days
+  def stepFinder(dfx:DataFrame, targetCountry:String):Unit={
+    val localRDD = dfx.select("Country/Region", "Province/State")
+      .withColumn("Caught Increment", dfx.col("Confirmed").cast(LongType))
+      .withColumn("Dead Increment", dfx.col("Confirmed").cast(LongType))
+      .withColumn("Revived Increment", dfx.col("Confirmed").cast(LongType)).rdd
+    localRDD.groupBy(col("Country/Region")).
+  }
 
 }
