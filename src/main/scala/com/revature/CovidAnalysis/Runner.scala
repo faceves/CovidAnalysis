@@ -1,18 +1,16 @@
 package com.revature.CovidAnalysis
 
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{Column, Dataset, Encoders, Row, SparkSession, DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoders, Row, SparkSession}
 import loadpath.LoadPath
-<<<<<<< HEAD
 import org.apache.spark.sql.catalyst.expressions.Or
-=======
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.functions.col
 
 import java.beans.Encoder
 //import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
 import org.apache.spark.sql.sources._
->>>>>>> f807754d6c2de372f3ea27504fd2f37abecbbc97
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.sources.And
 import org.apache.spark.sql.functions._
@@ -97,27 +95,31 @@ object Runner {
     //california.show()
 
 
-
+    /**
     covid_accum_DB.show()
     covid_confirmed_US_DB.show()
     covid_confirmed_DB.show()
     covid_deaths_DB.show()
     covid_deaths_US_DB.show()
     covid_recovered_DB.show()
+    **/
 
 
+    val dt = firstOccurrence_US(covid_accum_DB,"Confirmed")
+    val dy = firstOccurrence_Countries(covid_accum_DB,"Confirmed");
 
-    val dt = firstOccurrence(covid_accum_DB,"Confirmed","Province/State")
-    val california = dt
-      .where($"Country/Region" === "US")
+    dt.show(60)
+    dy.show(300)
+    /**
+    val california = dt.where($"Country/Region" === "US")
       .where($"Province/State".like("%California%")
         || $"Province/State".like("%CA%"))
-    california.show(58, false)
-
+    california.show(58)
+    **/
     //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
-    latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
-    latestValueForSubTables(covid_deaths_DB, "Country/Region", "5/2/21") //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
-    latestValueForSubTables(covid_confirmed_DB, "Province/State", "5/2/21")
+    //latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
+    //latestValueForSubTables(covid_deaths_DB, "Country/Region", "5/2/21") //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
+    //latestValueForSubTables(covid_confirmed_DB, "Province/State", "5/2/21")
       //we should JUST go by country, because all the undocumented provinces/states across countries will get lumped together
 
     //covid_accum_DB.select("*").where(col("ObservationDate") === "05/02/2021" && col("Country/Region").like("U%S%")).show
@@ -137,8 +139,6 @@ object Runner {
 
     //val FiveMostRecoveries = ratio.orderBy(desc("Decimal Recoveries")).show(5)
     //val FiveLeastRecoveries = ratio.orderBy(asc("Decimal Recoveries")).show(5)
-    val dt = firstOccurrence(covid_accum_DB,"Deaths","Province/State")
-    dt.show()
 
 
     spark.close()
@@ -158,7 +158,7 @@ object Runner {
     df_mod.withColumn("delta",df_mod(dt)-df_mod(startDate))
   }
 
-  def spikeAtTarget(dfFiller:DataFrame, targetFilter:String, target:String, initialDate:String, dateRange:Int, spikeFactor:Double):Unit={ //what to Return?
+  def spikeAtTarget(dfSource:DataFrame, targetFilter:String, target:String, initialDate:String, dateRange:Int, spikeFactor:Double):Unit={ //what to Return?
     // dfFiller is the dataframe we want to look into
     // targetFilter is the column we want to target
     // target is the value of the column set we want to look through
@@ -169,10 +169,10 @@ object Runner {
     // spikeFactor is the facter by which some confirmed-case growth is increased
     //      (i.e. spikeFactor = 3.0, in 14 days we go from 10 -> 25 means the growth factor is 2.5 < 3.0 and so it does not 'count' as a spike)
 
-    var spikeShell = dfFiller.select("*").where(col(s"${targetFilter}") === s"${target}") //create DF from input DF as data filtered by target
+    var spikeShell = dfSource.where(col(s"${targetFilter}") === s"${target}") //create DF from input DF as data filtered by target
     //spikeShell.show()
-    val startDate = twoWeekCatcher(dfFiller, initialDate, 14)
-    val endDate = twoWeekCatcher(dfFiller, initialDate, dateRange + 14) // get date after a number of days equal to dateRange
+    val startDate = twoWeekCatcher(dfSource, initialDate, 14)
+    val endDate = twoWeekCatcher(dfSource, initialDate, dateRange + 14) // get date after a number of days equal to dateRange
 
     println(s"$startDate")
     println(s"$endDate")
@@ -182,7 +182,7 @@ object Runner {
     var spikeStart = spikeShell
     var spikeEnd = spikeShell
 
-    if (dfFiller.schema.fieldNames.contains("ObservationDate")){
+    if (dfSource.schema.fieldNames.contains("ObservationDate")){
       println(" 'this' ")
       startColName = "ObservationDate"
       endColName = "ObservationDate"
@@ -268,19 +268,91 @@ object Runner {
    * @param df, occurTypeCol = "Deaths", occurByCol = "Country/Region"
    * */
 
-  def firstOccurrence(df: DataFrame, occurTypeCol: String, occurByCol: String): DataFrame = {
+  def firstOccurrence(dfSource: DataFrame, occurTypeCol: String, occurByCol: String, occurByTarget: String = ""): DataFrame = {
 
+    //removes useless data and adding a formatted date column
     val filteredDF =
-      df.where(s"$occurTypeCol > 0")
-      .withColumn("Date",to_date(df("ObservationDate"), "MM/dd/yy"))
+      dfSource.where(s"$occurTypeCol > 0")
+      .withColumn("FormattedDate",to_date(dfSource("ObservationDate"), "MM/dd/yy"))
 
-    val window = Window.partitionBy(occurByCol).orderBy("Date")
-    val firstOccurDF =
-        filteredDF.withColumn("rowNum", row_number().over(window))
+    //partitioning by given column to order the dates and grab the first instance.
+    val window = Window.partitionBy(occurByCol).orderBy("FormattedDate")
+    var firstOccurDF =
+          filteredDF.withColumn("rowNum", row_number().over(window))
           .where("rowNum == 1" )
-          .drop("Date","rowNum")
+          .drop("rowNum")
+    if(occurByTarget != "")
+      firstOccurDF = firstOccurDF.where(firstOccurDF(occurByCol).like("%"+occurByTarget))
     firstOccurDF
 
+  }
+
+  def firstOccurrence_US (dfSource: DataFrame, occurType: String): DataFrame = {
+    val firstOccurUS = firstOccurrence(dfSource,occurType, "Province/State").where(col("Country/Region") === "US")
+    val states: List[String] = List[String]("Alabama", "Alaska", "American Samoa", "Arizona", "Arkansas", "California",
+      "Colorado", "Connecticut", "Delaware", "District of Columbia", "Florida", "Georgia", "Guam", "Hawaii",
+      "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts",
+      "Michigan", "Minnesota", "Minor Outlying Islands", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
+      "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Northern Mariana Islands",
+      "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Puerto Rico", "Rhode Island", "South Carolina", "South Dakota", "Tennessee",
+      "Texas", "U.S. Virgin Islands", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming")
+    val statesAbrev: List[String] = List[String]("AK", "AL", "AR", "AS", "AZ", "CA", "CO", "CT", "DC", "DE", "FL",
+      "GA", "GU", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", "MO", "MP", "MS", "MT",
+      "NC", "ND", "NE", "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "PR", "RI", "SC", "SD", "TN", "TX", "UM",
+      "UT", "VA", "VI", "VT", "WA", "WI", "WV", "WY")
+
+    val cleansed =
+      firstOccurUS
+        .where(firstOccurUS("Province/State")
+        .isin(states:_*))
+        .orderBy("FormattedDate")
+        .drop("FormattedDate")
+
+    cleansed
+  }
+
+  def firstOccurrence_Countries (dfSource: DataFrame, occurType: String): DataFrame = {
+    val firstOccurGlobal = firstOccurrence(dfSource,occurType, "Country/Region")
+    val countries: List[String] = List[String]("US", "Canada", "Afghanistan", "Albania", "Algeria", "American Samoa",
+      "Andorra", "Angola", "Anguilla", "Antarctica", "Antigua and/or Barbuda", "Argentina", "Armenia", "Aruba", "Australia",
+      "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin",
+      "Bermuda", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Bouvet Island", "Brazil",
+      "British Indian Ocean Territory", "Brunei Darussalam", "Bulgaria", "Burkina Faso", "Burundi", "Cambodia", "Cameroon",
+      "Cape Verde", "Cayman Islands", "Central African Republic", "Chad", "Chile", "China", "Christmas Island", "Cocos (Keeling) " +
+        "Islands", "Colombia", "Comoros", "Congo", "Cook Islands", "Costa Rica", "Croatia (Hrvatska)", "Cuba", "Cyprus",
+      "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "East Timor", "Ecudaor", "Egypt",
+      "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Ethiopia", "Falkland Islands (Malvinas)", "Faroe Islands",
+      "Fiji", "Finland", "France", "France, Metropolitan", "French Guiana", "French Polynesia", "French Southern Territories",
+      "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Gibraltar", "Greece", "Greenland", "Grenada", "Guadeloupe", "Guam",
+      "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Heard and Mc Donald Islands", "Honduras", "Hong Kong",
+      "Hungary", "Iceland", "India", "Indonesia", "Iran (Islamic Republic of)", "Iraq", "Ireland", "Israel", "Italy",
+      "Ivory Coast", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Korea, Democratic People's Republic of",
+      "Korea, Republic of", "Kosovo", "Kuwait", "Kyrgyzstan", "Lao People's Democratic Republic", "Latvia", "Lebanon", "Lesotho",
+      "Liberia", "Libyan Arab Jamahiriya", "Liechtenstein", "Lithuania", "Luxembourg", "Macau", "Macedonia", "Madagascar",
+      "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Martinique", "Mauritania", "Mauritius",
+      "Mayotte", "Mexico", "Micronesia, Federated States of", "Moldova, Republic of", "Monaco", "Mongolia", "Montserrat",
+      "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "Netherlands Antilles", "New Caledonia",
+      "New Zealand", "Nicaragua", "Niger", "Nigeria", "Niue", "Norfork Island", "Northern Mariana Islands", "Norway", "Oman",
+      "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Pitcairn", "Poland", "Portugal",
+      "Puerto Rico", "Qatar", "Reunion", "Romania", "Russian Federation", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia",
+      "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal",
+      "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa",
+      "South Georgia South Sandwich Islands", "South Sudan", "Spain", "Sri Lanka", "St. Helena", "St. Pierre and Miquelon",
+      "Sudan", "Suriname", "Svalbarn and Jan Mayen Islands", "Swaziland", "Sweden", "Switzerland", "Syrian Arab Republic",
+      "Taiwan", "Tajikistan", "Tanzania, United Republic of", "Thailand", "Togo", "Tokelau", "Tonga", "Trinidad and Tobago",
+      "Tunisia", "Turkey", "Turkmenistan", "Turks and Caicos Islands", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
+      "United Kingdom", "United States minor outlying islands", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City State",
+      "Venezuela", "Vietnam", "Virigan Islands (British)", "Virgin Islands (U.S.)", "Wallis and Futuna Islands", "Western Sahara",
+      "Yemen", "Yugoslavia", "Zaire", "Zambia", "Zimbabwe")
+
+    val cleansed =
+      firstOccurGlobal
+        .where(firstOccurGlobal("Country/Region")
+          .isin(countries:_*))
+        .orderBy("FormattedDate")
+        .drop("FormattedDate")
+
+    cleansed
   }
 
 
