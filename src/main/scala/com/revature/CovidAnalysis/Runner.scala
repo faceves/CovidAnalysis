@@ -280,12 +280,13 @@ object Runner {
 
   }
 
-  def incrementGenerator(dfx: DataFrame, isUS:Boolean, context:SparkSession): DataFrame = {
+  def incrementGenerator(dfx: DataFrame, isUS:Boolean, context:SparkSession): Unit = {
     val schemaRetention = dfx.schema
     val trimmerValue = if (isUS) 13 else 4
     val dfxFiller = dfx.na.fill(" ", Seq("*"))
     val squishColumnsTogether = dfxFiller.withColumn("ClumpRow", expr("concat_ws(',',*)"))
-    val renameAllColumns = squishColumnsTogether.select(col("*"))
+    val identiyColumns = squishColumnsTogether.columns.filter(a => !a.contains("/"))
+    val renameAllColumns = squishColumnsTogether.select(identiyColumns.head, identiyColumns.tail: _*)
     val produceIntArray = udf((a: String) => (a.split(",").drop(trimmerValue).map(x => x.toInt)))
     val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("ClumpRow"))).drop(col("ClumpRow"))
     dfxWithIntArray.printSchema()
@@ -298,9 +299,11 @@ object Runner {
     val lengthOfArray = dfxIncrement.withColumn("IncrementExpansion", org.apache.spark.sql.functions.size(col("Increment")))
       .selectExpr("max(IncrementExpansion)").head().getInt(0)
     val dfxExpanded = dfxIncrement.select(col("*")+:(0 until lengthOfArray).map(u => dfxIncrement.col("Increment").getItem(u).alias(s"Day $u")): _*).drop("Increment")
-    val dfxToRDD = dfxExpanded.select("*").rdd
-    val dfxOutput = context.createDataFrame(dfxToRDD,schema=schemaRetention)
-    dfxOutput
+    dfxExpanded.show()
+    //val dfxToRDD = dfxExpanded.select("*").rdd
+    //dfxToRDD.collect()
+    //val dfxOutput = context.createDataFrame(dfxToRDD,schema=schemaRetention)
+    //dfxOutput.show()
     //hehe lmao
   }
 
