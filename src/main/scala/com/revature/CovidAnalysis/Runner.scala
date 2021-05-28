@@ -93,7 +93,7 @@ object Runner {
      * covid_recovered_DB.show()
      * */
 
-    incrementGenerator(covid_confirmed_US_DB, true)
+    incrementGenerator(covid_confirmed_US_DB, true, spark)
 
     //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
     //val a = latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021").show(false) //latest 'deaths, confirms, and recoveries' based on input day on Big Set
@@ -280,22 +280,27 @@ object Runner {
 
   }
 
-  def incrementGenerator(dfx: DataFrame, isUS: Boolean): DataFrame = {
-    val schemaRetention = dfx.schema.formatted("csv")
+  def incrementGenerator(dfx: DataFrame, isUS:Boolean, context:SparkSession): DataFrame = {
+    val schemaRetention = dfx.schema
     val trimmerValue = if (isUS) 13 else 4
     val dfxFiller = dfx.na.fill(" ", Seq("*"))
     val squishColumnsTogether = dfxFiller.withColumn("ClumpRow", expr("concat_ws(',',*)"))
-    val renameAllColumns = squishColumnsTogether.select(col("Country_Region").as("CR"), col("Province_State").as("PS"), col("Lat").as("LAT"), col("Long_").as("LONG"), col("ClumpRow").as("All"))
+    val renameAllColumns = squishColumnsTogether.select(col("*"))
     val produceIntArray = udf((a: String) => (a.split(",").drop(trimmerValue).map(x => x.toInt)))
-    val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("All"))).drop(col("All"))
+    val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("ClumpRow"))).drop(col("ClumpRow"))
     dfxWithIntArray.printSchema()
     val offsetIntArray = udf((x:Seq[Int]) => 0+:x.dropRight(1))
     val dfxWithOffset = dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
     val arrayZipper = udf((m:Seq[Int], n:Seq[Int]) => (m zip n).toList)
     val dfxTogether = dfxWithOffset.select("*").withColumn("Yesterday_Today", arrayZipper(col("Daily Tallies"), col("Daily Offset"))).drop(col("Daily Tallies")).drop(col("Daily Offset"))
-    val increment = udf((p:Seq[Row]) => p.map(q =>  q.getInt(0)- q.getInt(1)))
+    val increment = udf((p:Seq[Row]) => p.map(q =>  (q.getInt(0)- q.getInt(1)).toString()))
     val dfxIncrement = dfxTogether.select("*").withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today"))
-    dfxIncrement
+    val lengthOfArray = dfxIncrement.withColumn("IncrementExpansion", org.apache.spark.sql.functions.size(col("Increment")))
+      .selectExpr("max(IncrementExpansion)").head().getInt(0)
+    val dfxExpanded = dfxIncrement.select(col("*")+:(0 until lengthOfArray).map(u => dfxIncrement.col("Increment").getItem(u).alias(s"Day $u")): _*).drop("Increment")
+    val dfxToRDD = dfxExpanded.select("*").rdd
+    val dfxOutput = context.createDataFrame(dfxToRDD,schema=schemaRetention)
+    dfxOutput
   }
 
 
