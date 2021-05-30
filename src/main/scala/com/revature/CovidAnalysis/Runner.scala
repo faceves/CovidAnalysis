@@ -104,12 +104,24 @@ object Runner {
     covid_recovered_DB.show()
     **/
 
+    val firstConfirmedCountries=
+      dataCleanseFilter(
+        firstOccurrenceCovid19(covid_accum_DB,"Confirmed","Country/Region")
+          .select("SNo","ObservationDate","Country/Region","Confirmed"),
+        "Country/Region"
+    )
 
-    val dt = firstOccurrence_US(covid_accum_DB,"Deaths")
-    val dy = firstOccurrence_Countries(covid_accum_DB,"Deaths");
+    val firstConfirmedUSStates =
+      dataCleanseFilter(
+        firstOccurrenceCovid19(covid_accum_DB,"Confirmed","Province/State")
+          .where($"Country/Region" === "US")
+          .select("SNo","ObservationDate","Province/State","Confirmed"),
+        "Province/State"
+      )
 
-    dt.show(60)
-    dy.show(300)
+    firstConfirmedUSStates.show()
+    firstConfirmedCountries.show()
+
     /**
     val california = dt.where($"Country/Region" === "US")
       .where($"Province/State".like("%California%")
@@ -265,60 +277,101 @@ object Runner {
 
 
   /**
-   * @param df, occurTypeCol = "Deaths", occurByCol = "Country/Region"
-   * */
+   * First occurence of the occurence type being sought after. Most importantly is including the date of the occurence
+   * and is ordered in ascending order.
+   * @param covid19AccumDB = the Covid_19_DB dataframe that contains the loaded data from the csv file
+   * @param occurTypeCol = the occurence type consisting of: Confirmed,Deaths, or Recovered.
+   * @param partitionByCol = the entity that we are trying to gain the occurence from, either Country or States. Could be
+   *                       expanded to Continents later.
+   * @param partitionByTarget = the target to better filter out results. This target only includes a subset filter based on
+   *                          the partitionByCol.
+   *                          e.g: target = San Diego County , partitionByCol = State/Province
+   * @return the first occurence data frame
+   */
 
-  def firstOccurrence(dfSource: DataFrame, occurTypeCol: String, occurByCol: String, occurByTarget: String = ""): DataFrame = {
+  def firstOccurrenceCovid19(covid19AccumDB: DataFrame, occurTypeCol: String, partitionByCol: String, partitionByTarget: String = ""): DataFrame = {
 
     //removes useless data and adding a formatted date column
     val filteredDF =
-      dfSource.where(s"$occurTypeCol > 0")
-      .withColumn("FormattedDate",to_date(dfSource("ObservationDate"), "MM/dd/yy"))
+      covid19AccumDB.where(s"$occurTypeCol > 0")
+      .withColumn("FormattedDate",to_date(covid19AccumDB("ObservationDate"), "MM/dd/yy"))
+      .cache()
 
     //partitioning by given column to order the dates and grab the first instance.
-    val window = Window.partitionBy(occurByCol).orderBy("FormattedDate")
+    val window = Window.partitionBy(partitionByCol).orderBy("FormattedDate")
     var firstOccurDF =
           filteredDF.withColumn("rowNum", row_number().over(window))
           .where("rowNum == 1" )
-          .drop("rowNum")
-    if(occurByTarget != "")
-      firstOccurDF = firstOccurDF.where(firstOccurDF(occurByCol).like("%"+occurByTarget))
+          .orderBy("FormattedDate")
+          .drop("rowNum", "FormattedDate")
+    if(partitionByTarget != "")
+      firstOccurDF = firstOccurDF.where(firstOccurDF(partitionByCol).like("%"+partitionByTarget+"%"))
     firstOccurDF
 
   }
 
-  def firstOccurrence_US (dfSource: DataFrame, occurType: String): DataFrame = {
-    val firstOccurUS = firstOccurrence(dfSource,occurType, "Province/State").where(col("Country/Region") === "US")
-    val states: List[String] = List[String]("Alabama", "Alaska", "American Samoa", "Arizona", "Arkansas", "California",
+  //val firstOccurUS = firstOccurrenceCovid19(covid19AccumDB,occurrenceType, targetCol).where(col("Country/Region") === "US").dataCleanseFilter()
+  //val firstOccurGlobal = firstOccurrenceCovid19(dfSource,occurType, "Country/Region").dataCleanseFilter()
+
+
+  /**
+   *  Returns the accumulated values from the Confirmed,Deaths and Recovered according to the targetColumn entity.
+   * side note:
+   * Using groupBy + agg is not ideal, ... for RDD's, it does not do map side reduce and requires unnecessary shuffling, but because it is a
+   * Dataset[Row], it uses the Catalyst Optimizer to optimize it to be the same as the RDD reduceByKey function.
+   *
+   * @param dfSource = only the Accum DF
+   * @param targetCol = is either Country or State
+   * @param target the country or state to filter the column by, if gicen
+   * @return = Dataframe accumulations
+   */
+  def attainTargetAccum(covid19Accum: DataFrame, targetCol: String, target: String = ""): DataFrame = {
+    val accumDF: DataFrame =
+      dataCleanseFilter(covid19Accum,targetCol,false,target)
+        .select(targetCol,"Confirmed","Deaths","Recovered")
+        .groupBy(targetCol)
+        .agg(
+          sum("Confirmed").as("Total Confirmed"),
+          sum("Deaths").as("Total Deaths"),
+          sum("Recovered").as("Total Recovered"))
+        .orderBy(targetCol)
+        .cache()
+    if(target != "")
+      return accumDF.where(accumDF(targetCol) === target)
+    accumDF
+  }
+
+  /**
+   *  dataCleanseFilter is a function that filters out all values that are not what are to be targeting and in essence
+   *  makes sure that the dataframe being returned is exactly what the target column is, Countries or States. At this stage
+   *  of development it only accepts states from the U.S but can be expanded on to be acceptable from states from global countries.
+   *  The isUSFile is a flag, because of the decision to not fully data clean or format the original dataframe
+   *  once loaded from CSV, this accounts for the time_series_US csv files that have their column with underscores instead
+   *  of /.
+   * @param toBeCleaned Dataframe to be cleaned while filtered
+   * @param targetCol Column that is being targeted to get the
+   * @param isUS_File A boolean that designates if the Dataframe to be cleaned is a US specific csv file
+   * @param target to be expanded on later => states/provinces from countries other then U.S or U.S State counties.
+   * @return
+   */
+  def dataCleanseFilter(toBeCleaned:DataFrame, targetCol: String, isUS_File: Boolean = false, target: String = ""): DataFrame = {
+    val statesUS: List[String] = List[String]("Alabama", "Alaska", "American Samoa", "Arizona", "Arkansas", "California",
       "Colorado", "Connecticut", "Delaware", "District of Columbia", "Florida", "Georgia", "Guam", "Hawaii",
       "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts",
       "Michigan", "Minnesota", "Minor Outlying Islands", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada",
       "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Northern Mariana Islands",
       "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Puerto Rico", "Rhode Island", "South Carolina", "South Dakota", "Tennessee",
       "Texas", "U.S. Virgin Islands", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming")
-    val statesAbrev: List[String] = List[String]("AK", "AL", "AR", "AS", "AZ", "CA", "CO", "CT", "DC", "DE", "FL",
+    val statesAbrevUS: List[String] = List[String]("AK", "AL", "AR", "AS", "AZ", "CA", "CO", "CT", "DC", "DE", "FL",
       "GA", "GU", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", "MO", "MP", "MS", "MT",
       "NC", "ND", "NE", "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "PR", "RI", "SC", "SD", "TN", "TX", "UM",
       "UT", "VA", "VI", "VT", "WA", "WI", "WV", "WY")
-
-    val cleansed =
-      firstOccurUS
-        .where(firstOccurUS("Province/State")
-        .isin(states:_*))
-        .orderBy("FormattedDate")
-        .drop("FormattedDate")
-
-    cleansed
-  }
-
-  def firstOccurrence_Countries (dfSource: DataFrame, occurType: String): DataFrame = {
-    val firstOccurGlobal = firstOccurrence(dfSource,occurType, "Country/Region")
     val countries: List[String] = List[String]("US", "Canada", "Afghanistan", "Albania", "Algeria", "American Samoa",
       "Andorra", "Angola", "Anguilla", "Antarctica", "Antigua and/or Barbuda", "Argentina", "Armenia", "Aruba", "Australia",
       "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin",
       "Bermuda", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Bouvet Island", "Brazil",
       "British Indian Ocean Territory", "Brunei Darussalam", "Bulgaria", "Burkina Faso", "Burundi", "Cambodia", "Cameroon",
-      "Cape Verde", "Cayman Islands", "Central African Republic", "Chad", "Chile", "China", "Christmas Island", "Cocos (Keeling) " +
+      "Cape Verde", "Cayman Islands", "Central African Republic", "Chad", "Chile", "Mainland China", "Christmas Island", "Cocos (Keeling) " +
         "Islands", "Colombia", "Comoros", "Congo", "Cook Islands", "Costa Rica", "Croatia (Hrvatska)", "Cuba", "Cyprus",
       "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "East Timor", "Ecuador", "Egypt",
       "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Ethiopia", "Falkland Islands (Malvinas)", "Faroe Islands",
@@ -344,17 +397,22 @@ object Runner {
       "United Kingdom", "United States minor outlying islands", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City State",
       "Venezuela", "Vietnam", "Virgin Islands (British)", "Virgin Islands (U.S.)", "Wallis and Futuna Islands", "Western Sahara",
       "Yemen", "Yugoslavia", "Zaire", "Zambia", "Zimbabwe")
+    var targetList: List[String] = List[String]()
 
-    val cleansed =
-      firstOccurGlobal
-        .where(firstOccurGlobal("Country/Region")
-          .isin(countries:_*))
-        .orderBy("FormattedDate")
-        .drop("FormattedDate")
+    if(isUS_File) {
+      if(targetCol == "Province_State")
+        targetList = statesUS
+      else
+        targetList = countries
+    }
+    else if(targetCol == "Province/State"){
+        targetList = statesUS
+    }
+    else {
+      targetList = countries
+    }
 
-    cleansed
+    toBeCleaned.where(toBeCleaned(targetCol).isin(targetList:_*))
   }
-
-
 
 }
