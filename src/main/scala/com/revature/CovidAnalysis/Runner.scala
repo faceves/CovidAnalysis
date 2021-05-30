@@ -1,5 +1,6 @@
 package com.revature.CovidAnalysis
 
+
 import org.apache.log4j.{Level, Logger}
 import com.google.common.math.DoubleMath.mean
 
@@ -18,19 +19,25 @@ import org.apache.spark.sql.types._
 
 import org.apache.spark.sql.types.{DateType, IntegerType, TimestampType}
 import org.apache.spark.sql.{Encoder, Encoders}
+
+import loadpath.LoadPath
+import org.apache.spark.sql.Row
+//import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
+
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark
-import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.functions.{array, avg, col, desc, explode, lit, max, min, struct}
-import org.apache.spark.sql.types.{DecimalType, DoubleType, FloatType, IntegerType, StringType}
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions.{col, desc, _}
+import org.apache.spark.sql.types.{DecimalType, IntegerType, _}
+import org.apache.spark.sql.{DataFrame, Encoders, SparkSession}
 
 import java.text.SimpleDateFormat
 import java.util.{Calendar, Date}
 
 
+
 object Runner {
 
-  def main(args: Array[String]) : Unit = {
+  def main(args: Array[String]): Unit = {
     val spark = SparkSession
       .builder()
       .appName("Covid Analysis")
@@ -45,7 +52,7 @@ object Runner {
 
     val covid_accum_DB = spark.read
       .option("header", true)
-      .option("delimiter",",")
+      .option("delimiter", ",")
       .format("csv")
       .load(LoadPath.hdfs_path + "covid_19_data.csv")
       .toDF()
@@ -55,54 +62,54 @@ object Runner {
 
     val covid_confirmed_DB = spark.read
       .option("header", true)
-      .option("delimiter",",")
+      .option("delimiter", ",")
       .format("csv")
       .load(LoadPath.hdfs_path + "time_series_covid_19_confirmed.csv")
       .toDF()
 
     val covid_confirmed_US_DB = spark.read
       .option("header", true)
-      .option("delimiter",",")
+      .option("delimiter", ",")
       .format("csv")
       .load(LoadPath.hdfs_path + "time_series_covid_19_confirmed_US.csv")
       .toDF()
 
     val covid_deaths_DB = spark.read
       .option("header", true)
-      .option("delimiter",",")
+      .option("delimiter", ",")
       .format("csv")
       .load(LoadPath.hdfs_path + "time_series_covid_19_deaths.csv")
       .toDF()
 
     val covid_deaths_US_DB = spark.read
       .option("header", true)
-      .option("delimiter",",")
+      .option("delimiter", ",")
       .format("csv")
       .load(LoadPath.hdfs_path + "time_series_covid_19_deaths_US.csv")
       .toDF()
 
     val covid_recovered_DB = spark.read
       .option("header", true)
-      .option("delimiter",",")
+      .option("delimiter", ",")
       .format("csv")
       .load(LoadPath.hdfs_path + "time_series_covid_19_recovered.csv")
       .toDF()
 
 
-
-    val stateDF = covid_confirmed_US_DB.select(covid_confirmed_US_DB("Province_State")).distinct()
-    val stateList = stateDF.collect.map(_(0)).toList
-    println(stateList)
+    //val stateDF = covid_confirmed_US_DB.select(covid_confirmed_US_DB("Province_State")).distinct()
+    //val stateList = stateDF.collect.map(_ (0)).toList
+    //println(stateList)
     //stateList.foreach(f=>allGrowthFactorDataPoints(covid_confirmed_US_DB.filter('Province_State===f.toString).na.fill("").filter('Admin2=!="Unassigned"),"USA", f.toString,"Confirmed Cases"))
 
     /**
-    covid_accum_DB.show()
-    covid_confirmed_US_DB.show()
-    covid_confirmed_DB.show()
-    covid_deaths_DB.show()
-    covid_deaths_US_DB.show()
-    covid_recovered_DB.show()
-    **/
+     * covid_accum_DB.show()
+     * covid_confirmed_US_DB.show()
+     * covid_confirmed_DB.show()
+     * covid_deaths_DB.show()
+     * covid_deaths_US_DB.show()
+     * covid_recovered_DB.show()
+     * */
+
 
 
     val firstConfirmedCountries=
@@ -135,6 +142,13 @@ object Runner {
     //latestValueForSubTables(covid_confirmed_DB, "Province/State", "5/2/21")
       //we should JUST go by country, because all the undocumented provinces/states across countries will get lumped together
 
+    incrementGenerator(covid_confirmed_US_DB, true, spark)
+
+    //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
+    //val a = latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021").show(false) //latest 'deaths, confirms, and recoveries' based on input day on Big Set
+    //val b = latestValueForSubTables(covid_deaths_DB, "Country/Region", "5/2/21").show(false) //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
+    //val c = latestValueForSubTables(covid_confirmed_US_DB, "Province_State", "5/2/21").show(false)
+    //we should JUST go by country, because all the undocumented provinces/states across countries will get lumped together
     //covid_accum_DB.select("*").where(col("ObservationDate") === "05/02/2021" && col("Country/Region").like("U%S%")).show
 
 
@@ -158,7 +172,7 @@ object Runner {
   }
 
   //do not use with covid_accum_DB
-  def changeOverTime(df: DataFrame, startDate: String, numOfDays: Int) ={
+  def changeOverTime(df: DataFrame, startDate: String, numOfDays: Int) = {
     val format = new SimpleDateFormat("M/d/yy")
     val date = format.parse(startDate)
     val c = Calendar.getInstance()
@@ -167,11 +181,12 @@ object Runner {
     val dt = format.format(c.getTime())
     var df_mod = df.select(df("Combined_Key"), df(startDate).cast(IntegerType)).orderBy(desc(startDate))
     val df_temp = df.select(df("Combined_Key").as("_n_"), df(dt).cast(IntegerType)).orderBy(desc(dt))
-    df_mod = df_mod.join(df_temp, df_temp("_n_")===df_mod("Combined_Key"), "inner").drop("_n_")
-    df_mod.withColumn("delta",df_mod(dt)-df_mod(startDate))
+    df_mod = df_mod.join(df_temp, df_temp("_n_") === df_mod("Combined_Key"), "inner").drop("_n_")
+    df_mod.withColumn("delta", df_mod(dt) - df_mod(startDate))
   }
+
   //only works when date is between 1/23/20-5/2/21
-  def growthFactor(df: DataFrame, strDate: String) ={
+  def growthFactor(df: DataFrame, strDate: String) = {
     val format = new SimpleDateFormat("M/d/yy")
     val date = format.parse(strDate)
     val c = Calendar.getInstance()
@@ -180,8 +195,8 @@ object Runner {
     val dt = format.format(c.getTime())
     var df_mod = df.select(df("Combined_Key").as("_n_"), df(strDate).cast(IntegerType)).orderBy(desc(strDate))
     val df_temp = df.select(df("Combined_Key").as("Location"), df(dt).cast(IntegerType)).orderBy(desc(dt))
-    df_mod = df_temp.join(df_mod, df_temp("Location")===df_mod("_n_"), "inner").drop("_n_")
-    df_mod.withColumn("delta",(((df_mod(strDate)/df_mod(dt))-1)*100).cast(DecimalType(8, 2))).na.fill(0)
+    df_mod = df_temp.join(df_mod, df_temp("Location") === df_mod("_n_"), "inner").drop("_n_")
+    df_mod.withColumn("delta", (((df_mod(strDate) / df_mod(dt)) - 1) * 100).cast(DecimalType(8, 2))).na.fill(0)
   }
 
   def spikeAtTarget(dfSource:DataFrame, targetFilter:String, target:String, initialDate:String, dateRange:Int, spikeFactor:Double):Unit={ //what to Return?
@@ -208,20 +223,21 @@ object Runner {
     var spikeStart = spikeShell
     var spikeEnd = spikeShell
 
+
     if (dfSource.schema.fieldNames.contains("ObservationDate")){
       println(" 'this' ")
       startColName = "ObservationDate"
       endColName = "ObservationDate"
-      spikeStart = spikeShell.select(col("Confirmed").as("Start Confirmed"),col("Country/Region").as("CR"),col("Province/State").as("PS")).where(col(s"${startColName}") === s"${startDate}" && col(s"$targetFilter") === s"$target")// get confirmed cases on start date
-      spikeEnd = spikeShell.select(col("Confirmed").as("End Confirmed"),col("Country/Region").as("CR"),col("Province/State").as("PS")).where(col(s"${endColName}") === s"${endDate}" && col(s"$targetFilter") === s"$target")// get confirmed cases on end date
+      spikeStart = spikeShell.select(col("Confirmed").as("Start Confirmed"), col("Country/Region").as("CR"), col("Province/State").as("PS")).where(col(s"${startColName}") === s"${startDate}" && col(s"$targetFilter") === s"$target") // get confirmed cases on start date
+      spikeEnd = spikeShell.select(col("Confirmed").as("End Confirmed"), col("Country/Region").as("CR"), col("Province/State").as("PS")).where(col(s"${endColName}") === s"${endDate}" && col(s"$targetFilter") === s"$target") // get confirmed cases on end date
     }
 
-    else{
+    else {
       println(" 'that' ")
       startColName = startDate
       endColName = endDate
-      spikeStart = spikeShell.select(col(s"${startColName}").as("Start Confirmed"),col("Country/Region").as("CR"),col("Province/State").as("PS")).where(col(s"$targetFilter") === s"$target")// get confirmed cases on start date
-      spikeEnd = spikeShell.select(col(s"${endColName}").as("End Confirmed"),col("Country/Region").as("CR"),col("Province/State").as("PS")).where(col(s"$targetFilter") === s"$target")// get confirmed cases on end date
+      spikeStart = spikeShell.select(col(s"${startColName}").as("Start Confirmed"), col("Country/Region").as("CR"), col("Province/State").as("PS")).where(col(s"$targetFilter") === s"$target") // get confirmed cases on start date
+      spikeEnd = spikeShell.select(col(s"${endColName}").as("End Confirmed"), col("Country/Region").as("CR"), col("Province/State").as("PS")).where(col(s"$targetFilter") === s"$target") // get confirmed cases on end date
     }
 
     println(" 'Existential Terror Noises' ")
@@ -229,7 +245,7 @@ object Runner {
     println("I can't take it anymore!")
     spikeEnd.show(false)
 
-    val spikeTime = spikeStart.join(spikeEnd, Seq("CR","PS"),"left").withColumn("SpikeFactor", ((spikeEnd.col("End Confirmed").cast(LongType)/spikeStart.col("Start Confirmed").cast(LongType)).minus(1)).multiply(100))
+    val spikeTime = spikeStart.join(spikeEnd, Seq("CR", "PS"), "left").withColumn("SpikeFactor", ((spikeEnd.col("End Confirmed").cast(LongType) / spikeStart.col("Start Confirmed").cast(LongType)).minus(1)).multiply(100))
     println("WI just wanna DIE~!")
     spikeTime.select("*").show(false)
     val check = spikeTime.select("*").where(col("SpikeFactor") >= spikeFactor)
@@ -239,54 +255,55 @@ object Runner {
 
 
   //Modification on Tim's Change Over Time Method, to output different dates based on input dates and spread
-  def twoWeekCatcher(dfx:DataFrame, start:String, spread:Int):String={
-    var startDate=""
+  def twoWeekCatcher(dfx: DataFrame, start: String, spread: Int): String = {
+    var startDate = ""
     var pattern = ""
-    if(dfx.schema.fieldNames.contains("ObservationDate")){
+    if (dfx.schema.fieldNames.contains("ObservationDate")) {
       val intermid = dfx.select("ObservationDate").where(col("ObservationDate") === s"${start}").collect
       startDate = intermid(0)(0).toString
       println(s"$startDate")
       pattern = "mm/dd/yyyy"
     }
     else {
-      startDate=start
+      startDate = start
       pattern = "M/d/yy"
     }
-      val format = new SimpleDateFormat(pattern)
-      val date = format.parse(startDate)
-      val c = Calendar.getInstance()
-      c.setTime(date)
-      c.add(Calendar.DATE, spread)
-      val dt = format.format(c.getTime())
-      dt
+    val format = new SimpleDateFormat(pattern)
+    val date = format.parse(startDate)
+    val c = Calendar.getInstance()
+    c.setTime(date)
+    c.add(Calendar.DATE, spread)
+    val dt = format.format(c.getTime())
+    dt
   }
 
-  def latestValuesForAccumulatedTable(dfx:DataFrame, targetColumn:String, targetDate:String):Unit={
+  def latestValuesForAccumulatedTable(dfx: DataFrame, targetColumn: String, targetDate: String): Unit = {
     val dateTarget = twoWeekCatcher(dfx, targetDate, 0)
     val dfxOne = dfx.select("*").where(col("ObservationDate") === dateTarget)
-    val dfxPrint= dfxOne.select("*")
-        .groupBy(targetColumn)
-        .agg(sum("Confirmed").as("Total Confirmations"), sum("Deaths").as("Total Deaths"), sum("Recovered").as("Total Recoveries"))
-        .orderBy(desc("Total Deaths"))
-        .show(50,false)
+    val dfxPrint = dfxOne.select("*")
+      .groupBy(targetColumn)
+      .agg(sum("Confirmed").as("Total Confirmations"), sum("Deaths").as("Total Deaths"), sum("Recovered").as("Total Recoveries"))
+      .orderBy(desc("Total Deaths"))
+      .show(50, false)
   }
 
-  def latestValueForSubTables(dfx:DataFrame, targetColumn:String, targetDate:String):Unit={
+  def latestValueForSubTables(dfx: DataFrame, targetColumn: String, targetDate: String): Unit = {
     val dateTarget = twoWeekCatcher(dfx, targetDate, 0)
     val dfxOne = dfx.select(col(targetColumn).as("key"), col(dateTarget).as("value"))
       .groupBy("key")
       .agg(sum("value").as("value"))
       .orderBy(desc("value"))
       .as[StepShell](Encoders.product[StepShell])
-      .show(50,false)
+      .show(50, false)
   }
 
   //find the difference of 'deaths/recoveries/confirms' between days
-  def stepFinder(dfx:DataFrame, targetCountry:String):Unit={
+  def stepFinder(dfx: DataFrame, targetCountry: String): Unit = {
     val localRDD = dfx.select("Country/Region", "Province/State")
       .withColumn("Caught Increment", dfx.col("Confirmed").cast(LongType))
-      .withColumn("Dead Increment", dfx.col("Confirmed").cast(LongType))
-      .withColumn("Revived Increment", dfx.col("Confirmed").cast(LongType)).rdd
+      .withColumn("Dead Increment", dfx.col("Deaths").cast(LongType))
+      .withColumn("Revived Increment", dfx.col("Recovered").cast(LongType)).rdd
+    //localRDD.groupBy(w => w.)
   }
 
 
@@ -322,6 +339,29 @@ object Runner {
       firstOccurDF = firstOccurDF.where(firstOccurDF(partitionByCol).like("%"+partitionByTarget+"%"))
     firstOccurDF
 
+  }
+
+
+  def incrementGenerator(dfx: DataFrame, isUS:Boolean, context:SparkSession): DataFrame = {
+    val schemaRetention = dfx.schema
+    val trimmerValue = if (isUS) 13 else 4
+    val dfxFiller = dfx.na.fill(" ", Seq("*"))
+    val squishColumnsTogether = dfxFiller.withColumn("ClumpRow", expr("concat_ws(',',*)"))
+    val identiyColumns = squishColumnsTogether.columns.filter(a => !a.contains("/"))
+    val renameAllColumns = squishColumnsTogether.select(identiyColumns.head, identiyColumns.tail: _*)
+    val produceIntArray = udf((a: String) => (a.split(",").drop(trimmerValue).map(x => x.toInt)))
+    val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("ClumpRow"))).drop(col("ClumpRow"))
+    dfxWithIntArray.printSchema()
+    val offsetIntArray = udf((x: Seq[Int]) => 0 +: x.dropRight(1))
+    val dfxWithOffset = dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
+    val arrayZipper = udf((m: Seq[Int], n: Seq[Int]) => (m zip n).toList)
+    val dfxTogether = dfxWithOffset.select("*").withColumn("Yesterday_Today", arrayZipper(col("Daily Tallies"), col("Daily Offset"))).drop(col("Daily Tallies")).drop(col("Daily Offset"))
+    val increment = udf((p: Seq[Row]) => p.map(q => (q.getInt(0) - q.getInt(1)).toString()))
+    val dfxIncrement = dfxTogether.select("*").withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today"))
+    val lengthOfArray = dfxIncrement.withColumn("IncrementExpansion", org.apache.spark.sql.functions.size(col("Increment")))
+      .selectExpr("max(IncrementExpansion)").head().getInt(0)
+    val dfxExpanded = dfxIncrement.select(col("*") +: (0 until lengthOfArray).map(u => dfxIncrement.col("Increment").getItem(u).alias(s"Day $u")): _*).drop("Increment")
+    dfxExpanded
   }
 
 
@@ -501,6 +541,70 @@ object Runner {
 
     var leastAvgDate = ""
     var leastAvgGrowthFactor = 1000000.0
+
+  /**
+    covid_confirmed_US_DB.show()
+    covid_confirmed_DB.show()
+    covid_deaths_DB.show()
+    covid_deaths_US_DB.show()
+    covid_recovered_DB.show()
+   **/
+  // take one of the above five dataframes and create a dataframe where each row has a field containing an array
+  // whose elements are indicative of the day-toi-day increase in values, rather than a historic total for each day
+  // Note that if you are looking at the US in particular, pass true in the second parameter. Otherwise pass false.
+
+  def incrementGenerator(dfx:DataFrame, isUS:Boolean):Unit={
+    var trimmerValue = 0
+    if(isUS)  {trimmerValue = 13}
+    else {trimmerValue = 4}
+
+    val dfxFiller = dfx.na.fill(" ", Seq("*"))
+    val squishColumnsTogether = dfxFiller.withColumn("ClumpRow", expr("concat_ws(',',*)"))
+    val renameAllColumns = squishColumnsTogether.select(col("Country_Region").as("CR"), col("Province_State").as("PS"), col("Lat").as("LAT"), col("Long_").as("LONG"), col("ClumpRow").as("All"))
+    val produceIntArray = udf((a:String) => (a.split(",").drop(trimmerValue).map(x => x.toInt)))
+    val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("All"))).drop(col("All"))
+    dfxWithIntArray.printSchema()
+    dfxWithIntArray.show
+    val offsetIntArray = udf((x:Array[Int]) => 0+:x.dropRight(1))
+    val dfxWithOffset = dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
+    val arrayZipper = udf((m:Array[Int], n:Array[Int]) => (m zip n).toList)
+    val dfxTogether = dfxWithOffset.select("*").withColumn("Yesterday_Today", arrayZipper(col("Daily Tallies"),col("Daily Offset"))).drop(col("Daily Tallies")).drop(col("Daily Offset"))
+    val increment = udf( (p:Array[(Int, Int)]) => p.map(q => q._1-q._2))
+    val dfxIncrement = dfxTogether.select(col("CR"),col("PS"), col("Yesterday_Today")).withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today"))
+    dfxIncrement.show()
+    dfxIncrement.collect()
+    dfxIncrement.collectAsList()
+
+    /*
+    val dfxFiller = dfx.na.fill(" ", Seq("*"))
+    val squishColumnsTogether = dfxFiller.withColumn("ClumpRow", expr("concat_ws(',',*)"))
+    val renameAllColumns = squishColumnsTogether.select(col("Country_Region").as("CR"), col("Province_State").as("PS"), col("Lat").as("LAT"), col("Long_").as("LONG"), col("ClumpRow").as("All"))
+    // Below is a REPL UDF that does the following:
+    //		splits each element such that the string is now an Array of Strings
+    //		drop the first four elements, since they are not numbers
+    //		convert the numbers into integers such that the output is an Array of Integers
+    val produceIntArray = udf((a:String) => (a.split(",").drop(trimmerValue).map(x => x.toInt)))
+    val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("All"))).drop(col("All"))
+    val offsetIntArray = udf((x:Array[Int]) => (0+:x.dropRight(1)))
+    val dfxWithOffset = dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
+    val arrayZipper = udf((m:Array[Int], n:Array[Int]) => m zip n)
+    val dfxTogether = dfxWithOffset.select("*").withColumn("Yesterday_Today", arrayZipper(col("Daily Offset"),col("Daily Tallies")))//.drop(col("Daily Tallies")).drop(col("Daily Offset"))
+    dfxTogether.collectAsList()
+    //val increment = udf( (p:Array[(Int, Int)]) => p.map(q => q._2-q._1)) // <--
+    //val dfxIncrement = dfxTogether.select(col("CR"),col("PS"), col("Yesterday_Today")).withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today"))
+    // val dfxIncrement = dfxTogether.select("*").withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today")).collect
+    //dfxIncrement.printSchema()
+    //val dfxIncrement1 = dfxIncrement.collect
+    //dfxIncrement1.show
+
+    */
+
+  }
+
+
+
+
+
 
     var maxGrowthDate = ""
     var maxGrowthFactor = -1000000.0
