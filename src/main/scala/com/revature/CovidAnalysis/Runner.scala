@@ -119,15 +119,14 @@ object Runner {
         "Province/State"
       )
 
+    val accumCountries = attainTargetAccum(covid_accum_DB,"Country/Region")
+    val accumUSStates = attainTargetAccum(covid_accum_DB, "Province/State")
+
     firstConfirmedUSStates.show()
     firstConfirmedCountries.show()
+    accumCountries.show()
+    accumUSStates.show()
 
-    /**
-    val california = dt.where($"Country/Region" === "US")
-      .where($"Province/State".like("%California%")
-        || $"Province/State".like("%CA%"))
-    california.show(58)
-    **/
     //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
     //latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
     //latestValueForSubTables(covid_deaths_DB, "Country/Region", "5/2/21") //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
@@ -320,15 +319,18 @@ object Runner {
    * Using groupBy + agg is not ideal, ... for RDD's, it does not do map side reduce and requires unnecessary shuffling, but because it is a
    * Dataset[Row], it uses the Catalyst Optimizer to optimize it to be the same as the RDD reduceByKey function.
    *
-   * @param dfSource = only the Accum DF
+   * @param covid19Accum = only the Accum DF
    * @param targetCol = is either Country or State
-   * @param target the country or state to filter the column by, if gicen
+   * @param target = target is only a subset of targetCol, the country or state/counties to filter the column by, if given
    * @return = Dataframe accumulations
    */
   def attainTargetAccum(covid19Accum: DataFrame, targetCol: String, target: String = ""): DataFrame = {
     val accumDF: DataFrame =
-      dataCleanseFilter(covid19Accum,targetCol,false,target)
-        .select(targetCol,"Confirmed","Deaths","Recovered")
+      dataCleanseFilter(
+        covid19Accum.select(targetCol,"Confirmed","Deaths","Recovered"),
+        targetCol,
+        target
+      )
         .groupBy(targetCol)
         .agg(
           sum("Confirmed").as("Total Confirmed"),
@@ -337,12 +339,12 @@ object Runner {
         .orderBy(targetCol)
         .cache()
     if(target != "")
-      return accumDF.where(accumDF(targetCol) === target)
+      return accumDF.where(accumDF(targetCol).like("%"+target))
     accumDF
   }
 
   /**
-   *  dataCleanseFilter is a function that filters out all values that are not what are to be targeting and in essence
+   *  dataCleanseFilter is a function that filters out all values that are not what are to be targeting in the normal format and in essence
    *  makes sure that the dataframe being returned is exactly what the target column is, Countries or States. At this stage
    *  of development it only accepts states from the U.S but can be expanded on to be acceptable from states from global countries.
    *  The isUSFile is a flag, because of the decision to not fully data clean or format the original dataframe
@@ -350,11 +352,10 @@ object Runner {
    *  of /.
    * @param toBeCleaned Dataframe to be cleaned while filtered
    * @param targetCol Column that is being targeted to get the
-   * @param isUS_File A boolean that designates if the Dataframe to be cleaned is a US specific csv file
    * @param target to be expanded on later => states/provinces from countries other then U.S or U.S State counties.
    * @return
    */
-  def dataCleanseFilter(toBeCleaned:DataFrame, targetCol: String, isUS_File: Boolean = false, target: String = ""): DataFrame = {
+  def dataCleanseFilter(toBeCleaned:DataFrame, targetCol: String, target: String = ""): DataFrame = {
     val statesUS: List[String] = List[String]("Alabama", "Alaska", "American Samoa", "Arizona", "Arkansas", "California",
       "Colorado", "Connecticut", "Delaware", "District of Columbia", "Florida", "Georgia", "Guam", "Hawaii",
       "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts",
@@ -399,18 +400,11 @@ object Runner {
       "Yemen", "Yugoslavia", "Zaire", "Zambia", "Zimbabwe")
     var targetList: List[String] = List[String]()
 
-    if(isUS_File) {
-      if(targetCol == "Province_State")
-        targetList = statesUS
-      else
-        targetList = countries
-    }
-    else if(targetCol == "Province/State"){
-        targetList = statesUS
-    }
-    else {
+    if(targetCol == "Province/State" || targetCol == "Province_State")
+      targetList = statesUS
+    else
       targetList = countries
-    }
+
 
     toBeCleaned.where(toBeCleaned(targetCol).isin(targetList:_*))
   }
