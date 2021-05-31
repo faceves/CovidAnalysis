@@ -290,7 +290,7 @@ object Runner {
     val produceIntArray = udf((a: String) => (a.split(",").drop(trimmerValue).map(x => x.toInt)))
     val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("ClumpRow"))).drop(col("ClumpRow"))
     val offsetIntArray = udf((x: Seq[Int]) => 0 +: x.dropRight(1))
-    val dfxWithOffset = dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
+    val dfxWithOffset =   dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
     val arrayZipper = udf((m: Seq[Int], n: Seq[Int]) => (m zip n).toList)
     val dfxTogether = dfxWithOffset.select("*").withColumn("Yesterday_Today", arrayZipper(col("Daily Tallies"), col("Daily Offset"))).drop(col("Daily Tallies")).drop(col("Daily Offset"))
     val increment = udf((p: Seq[Row]) => p.map(q => (q.getInt(0) - q.getInt(1)).toString()))
@@ -298,7 +298,8 @@ object Runner {
     val lengthOfArray = dfxIncrement.withColumn("IncrementExpansion", org.apache.spark.sql.functions.size(col("Increment")))
       .selectExpr("max(IncrementExpansion)").head().getInt(0)
     val dfxExpanded = dfxIncrement.select(col("*") +: (0 until lengthOfArray).map(u => dfxIncrement.col("Increment").getItem(u).alias(s"Day $u")): _*).drop("Increment")
-    dfxExpanded
+    val outputDataFrame = context.createDataFrame(dfxExpanded.rdd, schemaRetention)
+    outputDataFrame
   }
 
 
