@@ -1,7 +1,7 @@
 package com.revature.CovidAnalysis
 
 import loadpath.LoadPath
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, Row}
 //import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.expressions.Window
@@ -119,6 +119,24 @@ object Runner {
     accumCountries.show()
     accumUSStates.show()
 
+    val firstCountriesRelationship =
+      firstOccurrRelationship(
+        firstConfirmedCountries,
+        accumCountries,
+        Seq[String]("Country/Region")
+      )
+
+
+    val firstUSStatesRelationship =
+      firstOccurrRelationship(
+        firstConfirmedUSStates,
+        accumUSStates,
+        Seq[String]("Province/State"),
+        covid_deaths_US_DB("Population")
+      )
+
+    firstCountriesRelationship.show(100)
+    firstUSStatesRelationship.show(100)
 
     //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
     //latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
@@ -328,6 +346,33 @@ object Runner {
       firstOccurDF = firstOccurDF.where(firstOccurDF(partitionByCol).like("%"+partitionByTarget+"%"))
     firstOccurDF
 
+  }
+
+  def firstOccurrRelationship(firstOccur :DataFrame, accumDF : DataFrame, joinCols: Seq[String], populationCol: Column = null): DataFrame = {
+    val firstJoined = accumDF.join(firstOccur,joinCols,"inner")
+    //Case Fatality Rate = Total Deaths/ Total Confirmed
+    val caseFatalityRatio =
+      round(
+        firstJoined("Total Deaths").cast(DoubleType)/(firstJoined("Total Confirmed").cast(DoubleType).cast(DoubleType)),
+        2
+        )
+
+    var relationship =
+      firstJoined
+        .withColumn("Case Fatality Ratio", caseFatalityRatio)
+
+    //if the occurenceRelationship is related to specifically the US states, population column is required
+    if(populationCol != null){
+      println("have pop")
+      // Mortality Ratio = Total Deaths/ Population
+      val mortalityRatio =
+        round(
+          firstJoined("Total Deaths").cast(DoubleType) / populationCol.cast(DoubleType),
+          2
+        )
+      relationship = relationship.withColumn("Mortality Ratio", mortalityRatio)
+    }
+    relationship.drop("sNo","Total Confirmed","Total Deaths","Total Recovered")
   }
 
   /**
