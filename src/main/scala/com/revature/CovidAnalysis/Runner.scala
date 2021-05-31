@@ -136,7 +136,7 @@ object Runner {
       )
 
     firstCountriesRelationship.show(100)
-    firstUSStatesRelationship.show(100)
+    firstUSStatesRelationship.show(60)
 
     //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
     //latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
