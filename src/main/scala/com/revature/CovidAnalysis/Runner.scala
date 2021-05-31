@@ -142,7 +142,7 @@ object Runner {
     //latestValueForSubTables(covid_confirmed_DB, "Province/State", "5/2/21")
       //we should JUST go by country, because all the undocumented provinces/states across countries will get lumped together
 
-    incrementGenerator(covid_confirmed_US_DB, true, spark)
+    incrementGenerator(covid_confirmed_US_DB, true, spark).show()
 
     //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
     //val a = latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021").show(false) //latest 'deaths, confirms, and recoveries' based on input day on Big Set
@@ -317,7 +317,7 @@ object Runner {
    * @param partitionByTarget = the target to better filter out results. This target only includes a subset filter based on
    *                          the partitionByCol.
    *                          e.g: target = San Diego County , partitionByCol = State/Province
-   * @return the first occurence data frame
+   * @return the first occurrence data frame
    */
 
   def firstOccurrenceCovid19(covid19AccumDB: DataFrame, occurTypeCol: String, partitionByCol: String, partitionByTarget: String = ""): DataFrame = {
