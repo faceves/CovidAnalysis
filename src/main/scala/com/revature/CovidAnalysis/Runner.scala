@@ -299,7 +299,8 @@ object Runner {
     val lengthOfArray = dfxIncrement.withColumn("IncrementExpansion", org.apache.spark.sql.functions.size(col("Increment")))
       .selectExpr("max(IncrementExpansion)").head().getInt(0)
     val dfxExpanded = dfxIncrement.select(col("*") +: (0 until lengthOfArray).map(u => dfxIncrement.col("Increment").getItem(u).alias(s"Day $u")): _*).drop("Increment")
-    dfxExpanded
+    val outputDataFrame = context.createDataFrame(dfxExpanded.rdd, schemaRetention)
+    outputDataFrame
   }
 
 
