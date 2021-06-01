@@ -28,6 +28,7 @@ object Runner {
 
     Logger.getLogger("org").setLevel(Level.ERROR)
 
+    //loading data
     val covid_accum_DB = spark.read
       .option("header", true)
       .option("delimiter", ",")
@@ -70,9 +71,8 @@ object Runner {
       .load(LoadPath.hdfs_path + "time_series_covid_19_recovered.csv")
       .toDF()
 
-
-
-    val firstConfirmedCountries =
+    //starting first occurrence relationship
+    val firstConfirmedCountries=
       dataCleanseFilter(
         firstOccurrenceCovid19(covid_accum_DB,"Confirmed","Country/Region")
           .select("First Confirmed Date","Country/Region","Confirmed"),
@@ -116,7 +116,7 @@ object Runner {
       covid_deaths_US_DB
     )
 
-
+    //starting historic, increment, & respective percentages
     println("Historic Table")
     covid_confirmed_US_DB.show(1)
 
