@@ -386,7 +386,7 @@ object Runner {
       .withColumn("Highest Daily Value", peakValue(col("Increments Ordered by Date")))
     if (isUS) dfxHighDays.select("Combined Key", "Count of High Days", "Highest Daily Value")
       .orderBy(desc("Count of High Days"), desc("Highest Daily Value"))
-    else dfxHighDays.select("Combined Key","Count of High Days", "Highest Daily Value")
+    else dfxHighDays.select(col("Province/State"), col("Country/Region"),col("Count of High Days"), col("Highest Daily Value"))
       .orderBy(desc("Count of High Days"), desc("Highest Daily Value"))
   }
 
