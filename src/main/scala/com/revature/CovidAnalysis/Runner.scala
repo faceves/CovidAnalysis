@@ -412,8 +412,8 @@ object Runner {
         "First Confirmed Date",
         "Confirmed",
         "First Deaths Date",
-        "Province/State",
         "Deaths",
+        "Province/State",
         "Case Fatality Ratio",
         "Mortality Ratio",
         "Case Recovery Ratio"
