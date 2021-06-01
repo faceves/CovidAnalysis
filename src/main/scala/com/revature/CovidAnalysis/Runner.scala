@@ -134,10 +134,8 @@ object Runner {
     val mno = localSpikeGenerator(abc, true, spark)
     mno.show(false)
     val efg = incrementGenerator(covid_confirmed_DB, false, spark)
-    val qrs = localSpikeGenerator(efg, true, spark)
+    val qrs = localSpikeGenerator(efg, false, spark)
     qrs.show
-
-    percentChangeGenerator(xyz,true, spark).show(1)
 
 
     spark.close()
@@ -518,10 +516,9 @@ object Runner {
       .withColumn("List of High Days", peakFilter(col("Ratio to Max")))
       .withColumn("Count of High Days", peakCounter(col("List of High Days")))
       .withColumn("Highest Daily Value", peakValue(col("Increments Ordered by Date")))
-    if (isUS) dfxHighDays.select("Combined Key", "Count of High Days", "Highest Daily Value")
-      .orderBy(desc("Count of High Days"), desc("Highest Daily Value"))
-    else dfxHighDays.select(col("Province/State"), col("Country/Region"),col("Count of High Days"), col("Highest Daily Value"))
-      .orderBy(desc("Count of High Days"), desc("Highest Daily Value"))
+    val dfxFinal = if (isUS) dfxHighDays.select(col("Combined_Key"), col("Count of High Days"), col("Highest Daily Value")).orderBy(desc("Count of High Days"), desc("Highest Daily Value"))
+      else dfxHighDays.select(col("Province/State"), col("Country/Region"),col("Count of High Days"), col("Highest Daily Value")).orderBy(desc("Count of High Days"), desc("Highest Daily Value"))
+    dfxFinal
   }
 
 
