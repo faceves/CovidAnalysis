@@ -20,10 +20,16 @@ make use of these trends to make some useful decisions.
 #Features
 List of features ready and TODO's for future development.
 
-Show Top 10 Most/Least Infected Countries Active Cases
-How well a region recovers compared to how often covid is contracted (time_series confirmed vs time_series recovered)
-See the death rates compared to contraction (time_series_US confirmed vs time_series_US deaths)
+###Features:
+- First Occur Relationship
+- \George Feature/
+- \Tim Feature/
 
+###TODO:
+- First Occur improvements for future
+  - Optimizing by implementing a broadcast join for joins.
+- \George feature improvents for future/
+- \Tim feature improvements for future/  
 
 #Getting Started
 GitHub clone URL: https://github.com/faceves/CovidAnalysis.git
