@@ -435,6 +435,11 @@ object Runner {
    * dataset containing the columns to display and find a relationship between the first date and the ratios of Case
    * Fatality, Case Recovered, and Mortality. Comparison and Analysis between each entity is also possible (US State or
    * Country).
+   *
+   * Side Note: displayFirstOccurrenceRelationship is not ideal, it creates dataframes within the function that can
+   * possibly be used outside of it. But for this projects scope it is fine. Otherwise it would have been passed in as a
+   * parameter to be used outside of the display function.
+   *
    * @param firstConfirmedCountries = first confirmed countries values consisting of the date with its respective confirmed case
    * @param firstDeathsCountries = first deatgs countries values consisting of the date with its respective deaths case
    * @param firstConfirmedUSStates = first confirmed US States values consisting of the date with its respective confirmed case
