@@ -394,25 +394,25 @@ object Runner {
       )
 
     //Reordering the columns for display
-    println("FIrst Occurence Relationship for Countries:")
+    println("First Occurrence Relationship for Countries:")
     firstCountriesRelationship
       .select(
         "First Confirmed Date",
-        "First Deaths Date",
-        "Country/Region",
         "Confirmed",
+        "First Deaths Date",
         "Deaths",
+        "Country/Region",
         "Case Fatality Ratio",
         "Case Recovery Ratio"
       ).show()
 
-    println("FIrst Occurence Relationship for US States:")
+    println("First Occurrence Relationship for US States:")
     firstUSStatesRelationship
       .select(
         "First Confirmed Date",
+        "Confirmed",
         "First Deaths Date",
         "Province/State",
-        "Confirmed",
         "Deaths",
         "Case Fatality Ratio",
         "Mortality Ratio",
