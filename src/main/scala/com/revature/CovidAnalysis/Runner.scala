@@ -130,12 +130,14 @@ object Runner {
     percentChangeGenerator(xyz, true, spark).show(1)
 
 
-    val abc = incrementGenerator(covid_confirmed_US_DB, true, spark)
-    val mno = localSpikeGenerator(abc, true, spark)
-    mno.show(false)
-    val efg = incrementGenerator(covid_confirmed_DB, false, spark)
-    val qrs = localSpikeGenerator(efg, false, spark)
-    qrs.show
+    val us_step = incrementGenerator(covid_confirmed_US_DB, true, spark)
+    val us_spikes = localSpikeGenerator(us_step, true, spark)
+    println("Number of Relative Spikes for a Given Region of the US paired with Maximum Values in a Given Day")
+    us_spikes.show(false)
+    val world_step = incrementGenerator(covid_confirmed_DB, false, spark)
+    val world_spikes = localSpikeGenerator(world_step, false, spark)
+    println("Number of Relative Spikes for a Given Region of the World paired with Maximum Values in a Given Day")
+    world_spikes.show(false)
 
 
     spark.close()
