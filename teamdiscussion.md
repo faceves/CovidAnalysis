@@ -85,10 +85,10 @@ time_series_covid_19_confirmed.csv,  time_series_covid_19_deaths.csv,  time_seri
        2. Holiday Spikes
     3. Continents
     4. Urban vs Rural
-    5. First Occurrence
+    5. First Occurrence  <- Francisco 
        1. Compare to neighboring First Occurrences
-    6. First Spike
+    6. First Spike       <- George
        1. Compare to neighboring First Spikes
-    7. Length of Spike
+    7. Length of Spike   <- Tim
         1. Compare Length of Spikes to Others
     8. Something with Lat & Long?
