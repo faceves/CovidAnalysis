@@ -1,9 +1,8 @@
 package com.revature.CovidAnalysis
 
 import loadpath.LoadPath
-import org.apache.spark.sql.Row
 import org.apache.spark.storage.StorageLevel._
-//import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
+import org.apache.spark.sql.{Column, Row}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, desc, _}
@@ -27,17 +26,12 @@ object Runner {
 
     Logger.getLogger("org").setLevel(Level.ERROR)
 
-    //implicit val enc: Encoder[CovidAccum] = Encoders.product[CovidAccum]
-
     val covid_accum_DB = spark.read
       .option("header", true)
       .option("delimiter", ",")
       .format("csv")
       .load(LoadPath.hdfs_path + "covid_19_data.csv")
       .toDF()
-
-
-    //implicit val enc: Encoder[CovidAccum] = Encoders.product[CovidAccum]
 
     val covid_confirmed_DB = spark.read
       .option("header", true)
@@ -74,25 +68,6 @@ object Runner {
       .load(LoadPath.hdfs_path + "time_series_covid_19_recovered.csv")
       .toDF()
 
-    val filteredDF =
-      covid_accum_DB.where($"Confirmed" > 0)
-    //val california = covid_accum_DB.where($"Country/Region" === "US" && $"Province/State" === "California")
-    //  .select($"Deaths".cast(IntegerType), $"ObservationDate").orderBy(desc("Deaths"))
-    //california.show()
-
-
-    //val stateDF = covid_confirmed_US_DB.select(covid_confirmed_US_DB("Province_State")).distinct()
-    //val stateList = stateDF.collect.map(_ (0)).toList
-    //println(stateList)
-    //stateList.foreach(f=>allGrowthFactorDataPoints(covid_confirmed_US_DB.filter('Province_State===f.toString).na.fill("").filter('Admin2=!="Unassigned"),"USA", f.toString,"Confirmed Cases"))
-    /**
-     * covid_accum_DB.show()
-     * covid_confirmed_US_DB.show()
-     * covid_confirmed_DB.show()
-     * covid_deaths_DB.show()
-     * covid_deaths_US_DB.show()
-     * covid_recovered_DB.show()
-     * */
 
 
 
@@ -100,7 +75,7 @@ object Runner {
     val firstConfirmedCountries=
       dataCleanseFilter(
         firstOccurrenceCovid19(covid_accum_DB,"Confirmed","Country/Region")
-          .select("SNo","ObservationDate","Country/Region","Confirmed"),
+          .select("First Confirmed Date","Country/Region","Confirmed"),
         "Country/Region"
     )
 
@@ -108,30 +83,43 @@ object Runner {
       dataCleanseFilter(
         firstOccurrenceCovid19(covid_accum_DB,"Confirmed","Province/State")
           .where($"Country/Region" === "US")
-          .select("SNo","ObservationDate","Province/State","Confirmed"),
+          .select("First Confirmed Date","Province/State","Confirmed"),
+        "Province/State"
+      )
+
+    val firstDeathsCountries =
+      dataCleanseFilter(
+        firstOccurrenceCovid19(covid_accum_DB, "Deaths", "Country/Region")
+          .select("First Deaths Date", "Country/Region", "Deaths"),
+        "Country/Region"
+      )
+    val firstDeathsUSStates =
+      dataCleanseFilter(
+        firstOccurrenceCovid19(covid_accum_DB, "Deaths", "Province/State")
+          .where($"Country/Region" === "US")
+          .select("First Deaths Date", "Province/State", "Deaths"),
         "Province/State"
       )
 
     val accumCountries = attainTargetAccum(covid_accum_DB,"Country/Region")
     val accumUSStates = attainTargetAccum(covid_accum_DB, "Province/State")
 
-    //firstConfirmedUSStates.show()
-    //firstConfirmedCountries.show()
-    //accumCountries.show()
-    //accumUSStates.show()
 
-
-
-    // Create a Set of DataFrames that are transformations of the Five original Subsets from Historic Values to Incremental Values
-    //val spikeProvider_US_C = incrementGenerator(covid_confirmed_US_DB, true, spark).cache()
-    //val spikeProvider_US_D = incrementGenerator(covid_deaths_US_DB, true, spark).persist(MEMORY_ONLY)
-    //val spikeProvider_W_C = incrementGenerator(covid_confirmed_DB, false, spark).persist(MEMORY_AND_DISK)
-    //val spikeProvider_W_D = incrementGenerator(covid_deaths_DB, false, spark).persist(DISK_ONLY)
-    //val spikeProvider_W_R = incrementGenerator(covid_recovered_DB, false, spark).persist(MEMORY_ONLY_SER)
+    displayLeastAndMostInfected(accumCountries, accumUSStates)
+    displayFirstOccurenceRelationship(
+      firstConfirmedCountries,
+      firstDeathsCountries,
+      firstConfirmedUSStates,
+      firstDeathsUSStates,
+      accumCountries,
+      accumUSStates,
+      covid_deaths_US_DB
+    )
 
 
     println("Historic Table")
     covid_confirmed_US_DB.show(1)
+
 
     println("Increment Table")
     val xyz = incrementGenerator(covid_confirmed_US_DB, true, spark)
@@ -144,161 +132,9 @@ object Runner {
     percentChangeGenerator(xyz,true, spark).show(1)
 
 
-
-
-    /*
-    println("Was there a spike in Confirmed Cases in Texas due to Christmas 2020?")
-    spikeAtTarget(spikeProvider_US_C, "Province_State", "Texas", "12/25/2020", 10, 15, true)
-
-    println("Was there a spike in Confirmed Deaths in New York due to Independence Day 2020?")
-    spikeAtTarget(spikeProvider_US_D, "Province_State", "New York", "07/04/2020", 10, 15,true)
-
-    println("Was there a spike in Confirmed Cases in Iran at the end of Ramadan 2020?")
-    spikeAtTarget(spikeProvider_W_C, "Country/Region", "Iran", "05/12/2020", 10, 15,false)
-
-    println("Was there a spike in Confirmed Deaths in Mainland China due to Lunar New Year 2021?")
-    spikeAtTarget(spikeProvider_W_D, "Country/Region", "China", "02/12/2021", 10, 15, false)
-
-    println("Was there a spike in Confirmed Recoveries in Russia due to Russia Day 2020?")
-    spikeAtTarget(spikeProvider_W_R, "Country/Region", "Russia", "06/12/2020", 10, 15, false)
-    */
-
     spark.close()
   }
 
-  //do not use with covid_accum_DB
-  def changeOverTime(df: DataFrame, startDate: String, numOfDays: Int) = {
-    val format = new SimpleDateFormat("M/d/yy")
-    val date = format.parse(startDate)
-    val c = Calendar.getInstance()
-    c.setTime(date)
-    c.add(Calendar.DATE, numOfDays)
-    val dt = format.format(c.getTime())
-    var df_mod = df.select(df("Combined_Key"), df(startDate).cast(IntegerType)).orderBy(desc(startDate))
-    val df_temp = df.select(df("Combined_Key").as("_n_"), df(dt).cast(IntegerType)).orderBy(desc(dt))
-    df_mod = df_mod.join(df_temp, df_temp("_n_") === df_mod("Combined_Key"), "inner").drop("_n_")
-    df_mod.withColumn("delta", df_mod(dt) - df_mod(startDate))
-  }
-
-  //only works when date is between 1/23/20-5/2/21
-  def growthFactor(df: DataFrame, strDate: String) = {
-    val format = new SimpleDateFormat("M/d/yy")
-    val date = format.parse(strDate)
-    val c = Calendar.getInstance()
-    c.setTime(date)
-    c.add(Calendar.DATE, -1)
-    val dt = format.format(c.getTime())
-    var df_mod = df.select(df("Combined_Key").as("_n_"), df(strDate).cast(IntegerType)).orderBy(desc(strDate))
-    val df_temp = df.select(df("Combined_Key").as("Location"), df(dt).cast(IntegerType)).orderBy(desc(dt))
-    df_mod = df_temp.join(df_mod, df_temp("Location") === df_mod("_n_"), "inner").drop("_n_")
-    df_mod.withColumn("delta", (((df_mod(strDate) / df_mod(dt)) - 1) * 100).cast(DecimalType(8, 2))).na.fill(0)
-  }
-
-  def spikeAtTarget(dfFiller: DataFrame, targetFilter: String, target: String, initialDate: String, dateRange: Int, spikeFactor: Double, isUS:Boolean): Unit = { //what to Return?
-    // dfFiller is the dataframe we want to look into
-    // targetFilter is the column we want to target
-    // target is the value of the column set we want to look through
-    // startDate is an arbitrary date we want to look at, for example June 12th is Brazilian Valentine's Day
-    // dateRange is the number of days after the startDate. Incubation is typically at most 14 days
-    //      then, set dateRange to 10-14 to see how many people are actually getting infected by it
-    //      alternatively, set the date to the 10th and look at 18 days for date Range to get a wider growth scope
-    // spikeFactor is the facter by which some confirmed-case growth is increased
-    //      (i.e. spikeFactor = 3.0, in 14 days we go from 10 -> 25 means the growth factor is 2.5 < 3.0 and so it does not 'count' as a spike)
-
-    var spikeShell = dfFiller.select("*").where(col(s"${targetFilter}") === s"${target}") //create DF from input DF as data filtered by target
-    val startDate = twoWeekCatcher(spikeShell, initialDate, 14)
-    val endDate = twoWeekCatcher(spikeShell, initialDate, dateRange + 14) // get date after a number of days equal to dateRange
-
-    println(s"$startDate")
-    println(s"$endDate")
-
-    var startColName = ""
-    var endColName = ""
-    var spikeStart = spikeShell
-    var spikeEnd = spikeShell
-
-    val cr = if (isUS) "Country_Region" else "Country/Region"
-    val ps = if (isUS) "Province_State" else "Province/State"
-
-    if (dfFiller.schema.fieldNames.contains("ObservationDate")) {
-      startColName = "ObservationDate"
-      endColName = "ObservationDate"
-      spikeStart = spikeShell.select(col("Confirmed").as("Start Confirmed").cast(IntegerType), col(cr).as("CR"), col(ps).as("PS")).where(col(s"${startColName}") === s"${startDate}" && col(s"$targetFilter") === s"$target") // get confirmed cases on start date
-      spikeEnd = spikeShell.select(col("Confirmed").as("End Confirmed").cast(IntegerType), col(cr).as("CR"), col(ps).as("PS")).where(col(s"${endColName}") === s"${endDate}" && col(s"$targetFilter") === s"$target") // get confirmed cases on end date
-    }
-
-    else {
-      startColName = startDate
-      endColName = endDate
-      spikeStart = spikeShell.select(col(s"${startColName}").as("Start Confirmed").cast(IntegerType), col(cr).as("CR"), col(ps).as("PS")).where(col(s"$targetFilter") === s"$target")
-      spikeEnd = spikeShell.select(col(s"${endColName}").as("End Confirmed").cast(IntegerType), col(cr).as("CR"), col(ps).as("PS")).where(col(s"$targetFilter") === s"$target")
-    }
-
-    val sumSS = spikeStart.groupBy("CR").sum("Start Confirmed").withColumnRenamed("sum(Start Confirmed)","Start Total")
-    val sumSE = spikeEnd.groupBy("CR").sum("End Confirmed").withColumnRenamed("sum(End Confirmed)", "End Total")
-
-    sumSS.show()
-    sumSE.show()
-
-    val spikeTime = sumSS.join(sumSE, sumSS("CR") <=> sumSE("CR"), "left")
-      .withColumn("Percent Change", ((sumSE.col("End Total").cast(LongType) / sumSS.col("Start Total").cast(LongType)).minus(1)).multiply(100))
-    spikeTime.select("*").show(false)
-    //val check = spikeTime.select("Percent Change").first()
-    //if(check > )
-  }
-
-
-  //Modification on Tim's Change Over Time Method, to output different dates based on input dates and spread
-  def twoWeekCatcher(dfx: DataFrame, start: String, spread: Int): String = {
-    var startDate = ""
-    var pattern = ""
-    if (dfx.schema.fieldNames.contains("ObservationDate")) {
-      val intermid = dfx.select("ObservationDate").where(col("ObservationDate") === s"${start}").collect
-      startDate = intermid(0)(0).toString
-      println(s"$startDate")
-      pattern = "mm/dd/yyyy"
-    }
-    else {
-      startDate = start
-      pattern = "M/d/yy"
-    }
-    val format = new SimpleDateFormat(pattern)
-    val date = format.parse(startDate)
-    val c = Calendar.getInstance()
-    c.setTime(date)
-    c.add(Calendar.DATE, spread)
-    val dt = format.format(c.getTime())
-    dt
-  }
-
-  def latestValuesForAccumulatedTable(dfx: DataFrame, targetColumn: String, targetDate: String): Unit = {
-    val dateTarget = twoWeekCatcher(dfx, targetDate, 0)
-    val dfxOne = dfx.select("*").where(col("ObservationDate") === dateTarget)
-    val dfxPrint = dfxOne.select("*")
-      .groupBy(targetColumn)
-      .agg(sum("Confirmed").as("Total Confirmations"), sum("Deaths").as("Total Deaths"), sum("Recovered").as("Total Recoveries"))
-      .orderBy(desc("Total Deaths"))
-      .show(50, false)
-  }
-
-  def latestValueForSubTables(dfx: DataFrame, targetColumn: String, targetDate: String): Unit = {
-    val dateTarget = twoWeekCatcher(dfx, targetDate, 0)
-    val dfxOne = dfx.select(col(targetColumn).as("key"), col(dateTarget).as("value"))
-      .groupBy("key")
-      .agg(sum("value").as("value"))
-      .orderBy(desc("value"))
-      .as[StepShell](Encoders.product[StepShell])
-      .show(50, false)
-  }
-
-  //find the difference of 'deaths/recoveries/confirms' between days
-  def stepFinder(dfx: DataFrame, targetCountry: String): Unit = {
-    val localRDD = dfx.select("Country/Region", "Province/State")
-      .withColumn("Caught Increment", dfx.col("Confirmed").cast(LongType))
-      .withColumn("Dead Increment", dfx.col("Deaths").cast(LongType))
-      .withColumn("Revived Increment", dfx.col("Recovered").cast(LongType)).rdd
-    //localRDD.groupBy(w => w.)
-  }
 
 
   /**
@@ -311,7 +147,7 @@ object Runner {
    * @param partitionByTarget = the target to better filter out results. This target only includes a subset filter based on
    *                          the partitionByCol.
    *                          e.g: target = San Diego County , partitionByCol = State/Province
-   * @return the first occurence data frame
+   * @return the first occurence data frame based on the occurrence type
    */
 
   def firstOccurrenceCovid19(covid19AccumDB: DataFrame, occurTypeCol: String, partitionByCol: String, partitionByTarget: String = ""): DataFrame = {
@@ -320,19 +156,81 @@ object Runner {
     val filteredDF =
       covid19AccumDB.where(s"$occurTypeCol > 0")
         .withColumn("FormattedDate",to_date(covid19AccumDB("ObservationDate"), "MM/dd/yy"))
+        .withColumnRenamed("ObservationDate", s"First $occurTypeCol Date")
         .cache()
 
     //partitioning by given column to order the dates and grab the first instance.
     val window = Window.partitionBy(partitionByCol).orderBy("FormattedDate")
     var firstOccurDF =
-      filteredDF.withColumn("rowNum", row_number().over(window))
+      filteredDF
+        .withColumn("rowNum", row_number().over(window))
         .where("rowNum == 1" )
         .orderBy("FormattedDate")
         .drop("rowNum", "FormattedDate")
     if(partitionByTarget != "")
       firstOccurDF = firstOccurDF.where(firstOccurDF(partitionByCol).like("%"+partitionByTarget+"%"))
-    firstOccurDF
 
+    filteredDF.unpersist()
+    firstOccurDF
+  }
+
+
+  /**
+   * firstOccurRelationship creates a dataset that attains the first occurence dates of first deaths and first confirmed
+   * cases and compares it to 3 ratios: Case Fatality Ratio, Case Recovered Ratio and Mortality Ratio, to find a relationship
+   * of how reactive/responsive states or countries are according to the timeframe(dates) given by the first confirmed or death case.
+   * Needed the accumulated table of Confirmed, Deaths, and Recovered instances in order to calculate the 3 ratios.
+   * Population is also needed from the time_series_covid_19_deaths_US.csv, so only the two columns of States and Population
+   * are needed to be passed in to be joined.
+   *
+   * Case Fatality Ratio = Total Deaths / Total Confirmed
+   * Case Recovered Ratio = Total Recovered / Total Confirmed
+   * Mortality Rate = Total Deaths / Population
+   * @param firstOccur = The first occurrence dataframe that has the joined DF's from First Deaths and First Confirmed
+   *                   firstOccur dataframes
+   * @param accumDF = The accumulated dataframe that has the summed data of Total Confirmed, Total Deaths, and Total Recovered
+   * @param joinCols = The join columns condition that are required to join the firstOccur and the accumDF
+   * @param populationDF = The dataframe required that contains the States Column with their respective Population Column
+   * @return = Returns a dataframe consisting of the dates of the first occurrences of First Death and First Confirmed with
+   *         the Case Fatality Ratio, Mortality Ratio, and Case Recovered Ratio to : compare amongst other entities, display
+   *         and find a relation revolving around the first occurrence dates.
+   */
+  def firstOccurrRelationship(firstOccur :DataFrame, accumDF : DataFrame, joinCols: Seq[String], populationDF: DataFrame = null): DataFrame = {
+    val firstJoined = accumDF.join(firstOccur,joinCols,"inner")
+
+    //Case Fatality Rate = Total Deaths/ Total Confirmed
+    val caseFatalityRatio =
+      round(
+        firstJoined("Total Deaths").cast(DoubleType)/(firstJoined("Total Confirmed").cast(DoubleType).cast(DoubleType)),
+        2
+        )
+
+    var relationship =
+      firstJoined
+        .withColumn("Case Fatality Ratio", caseFatalityRatio)
+
+    //if the occurenceRelationship is related to specifically the US states, populationDF is required to show mortality rate
+    //populationDF is specific to the time_series_death_us.csv where it has the province state column as Province_State
+    if(populationDF != null){
+      relationship = relationship.join(populationDF,relationship("Province/State") === populationDF("Province_State"),"inner")
+
+      // Mortality Ratio = Total Deaths/ Population
+      val mortalityRatio =
+        round(
+          relationship("Total Deaths").cast(DoubleType) / relationship("Population").cast(DoubleType),
+          2
+        )
+      relationship = relationship.withColumn("Mortality Ratio", mortalityRatio).drop("Province_State","Population")
+    }
+
+    //Case Recovery Ratio = Total Recovered/Total Confirmed
+    val caseRecoveryRatio =
+      round(
+        relationship("Total Recovered").cast(DoubleType) / relationship("Total Confirmed"),
+        2
+      )
+    relationship = relationship.withColumn("Case Recovery Ratio", caseRecoveryRatio)
+    relationship.drop("Total Confirmed","Total Deaths","Total Recovered")
   }
 
   /**
@@ -431,6 +329,118 @@ object Runner {
     toBeCleaned.where(toBeCleaned(targetCol).isin(targetList:_*))
   }
 
+  /**
+   * Displays the first occurence relationship in a dataset both for US States and Countrie by joining the respective
+   * firstDeaths and firstConfirmed dataframes to pass it into the firstOccurrenceRelation function to return back a
+   * dataset containing the columns to display and find a relationship between the first date and the ratios of Case
+   * Fatality, Case Recovered, and Mortality. Comparison and Analysis between each entity is also possible (US State or
+   * Country).
+   *
+   * Side Note: displayFirstOccurrenceRelationship is not ideal, it creates dataframes within the function that can
+   * possibly be used outside of it. But for this projects scope it is fine. Otherwise it would have been passed in as a
+   * parameter to be used outside of the display function.
+   *
+   * @param firstConfirmedCountries = first confirmed countries values consisting of the date with its respective confirmed case
+   * @param firstDeathsCountries = first deatgs countries values consisting of the date with its respective deaths case
+   * @param firstConfirmedUSStates = first confirmed US States values consisting of the date with its respective confirmed case
+   * @param firstDeathsUSStates = first deaths countries values consisting of the date with its respective deaths case
+   * @param accumCountries = accumulated values of Total Confirmed, Total Deaths, Total Recovered for Countries
+   * @param accumUSStates = accumulated values of Total Confirmed, Total Deaths, Total Recovered for US States
+   * @param covid_deaths_US_DB = the original source of covid deaths, to be used by passing in only the Population column
+   *                           with its respective Province/State column into the firstOccurenceRelationship for US States.
+   */
+  def displayFirstOccurenceRelationship(
+                                         firstConfirmedCountries: DataFrame,
+                                         firstDeathsCountries: DataFrame,
+                                         firstConfirmedUSStates: DataFrame,
+                                         firstDeathsUSStates: DataFrame,
+                                         accumCountries: DataFrame,
+                                         accumUSStates: DataFrame,
+                                         covid_deaths_US_DB: DataFrame
+                                       ) : Unit = {
+    val firstCountries = firstConfirmedCountries.join(firstDeathsCountries,"Country/Region")
+    val firstCountriesRelationship =
+      firstOccurrRelationship(
+        firstCountries,
+        accumCountries,
+        Seq[String]("Country/Region")
+      )
+
+    //summing all counties into by its US  state.
+    val statePopulationDF =
+      dataCleanseFilter(
+        covid_deaths_US_DB.select("Province_State", "Population"),
+        "Province_State"
+      )
+        .groupBy("Province_State")
+        .agg(sum(col("Population").cast(IntegerType)).as("Population"))
+
+    val firstUSStates = firstConfirmedUSStates.join(firstDeathsUSStates,"Province/State")
+    val firstUSStatesRelationship =
+      firstOccurrRelationship(
+        firstUSStates,
+        accumUSStates,
+        Seq[String]("Province/State"),
+        statePopulationDF
+      )
+
+    //Reordering the columns for display
+    println("FIrst Occurence Relationship for Countries:")
+    firstCountriesRelationship
+      .select(
+        "First Confirmed Date",
+        "First Deaths Date",
+        "Country/Region",
+        "Confirmed",
+        "Deaths",
+        "Case Fatality Ratio",
+        "Case Recovery Ratio"
+      ).show()
+
+    println("FIrst Occurence Relationship for US States:")
+    firstUSStatesRelationship
+      .select(
+        "First Confirmed Date",
+        "First Deaths Date",
+        "Province/State",
+        "Confirmed",
+        "Deaths",
+        "Case Fatality Ratio",
+        "Mortality Ratio",
+        "Case Recovery Ratio"
+      ).show()
+  }
+
+  /**
+   * Displays the Top 10 Most and Least infected countries and US states.
+   * @param accumCountries = accumulated values of Confirmed, Deaths and Recovered for Countries.
+   * @param accumUSStates = accumulated values of Confirmed, Deaths and Recovered for US States.
+   */
+  def displayLeastAndMostInfected(accumCountries : DataFrame, accumUSStates:DataFrame): Unit = {
+    println("Top 10 Most Infected Countries:")
+    accumCountries
+      .orderBy(desc("Total Confirmed"))
+      .select(col("Country/Region"), col("Total Confirmed").as("Infected"))
+      .show(10)
+
+    println("Top 10 Least Infected Cpuntries:")
+    accumCountries
+      .orderBy(asc("Total Confirmed"))
+      .select(col("Country/Region"), col("Total Confirmed").as("Infected"))
+      .show(10)
+
+    println("Top 10 Most Infected U.S States:")
+    accumUSStates
+      .orderBy(desc("Total Confirmed"))
+      .select(col("Province/State"), col("Total Confirmed").as("Infected"))
+      .show(10)
+
+    println("Top 10 Least Infected U.S States:")
+    accumUSStates
+      .orderBy(asc("Total Confirmed"))
+      .select(col("Province/State"), col("Total Confirmed").as("Infected"))
+      .show(10)
+  }
 
   def incrementGenerator(dfx: DataFrame, isUS:Boolean, context:SparkSession): DataFrame = {
     val schemaRetention = dfx.schema
@@ -476,10 +486,61 @@ object Runner {
     outputDataFrame
   }
 
+  //Modification on Tim's Change Over Time Method, to output different dates based on input dates and spread
+  def twoWeekCatcher(dfx: DataFrame, start: String, spread: Int): String = {
+    var startDate = ""
+    var pattern = ""
+    if (dfx.schema.fieldNames.contains("ObservationDate")) {
+      val intermid = dfx.select("ObservationDate").where(col("ObservationDate") === s"${start}").collect
+      startDate = intermid(0)(0).toString
+      println(s"$startDate")
+      pattern = "mm/dd/yyyy"
+    }
+    else {
+      startDate = start
+      pattern = "M/d/yy"
+    }
+    val format = new SimpleDateFormat(pattern)
+    val date = format.parse(startDate)
+    val c = Calendar.getInstance()
+    c.setTime(date)
+    c.add(Calendar.DATE, spread)
+    val dt = format.format(c.getTime())
+    dt
+  }
+
+  //do not use with covid_accum_DB
+  def changeOverTime(df: DataFrame, startDate: String, numOfDays: Int) = {
+    val format = new SimpleDateFormat("M/d/yy")
+    val date = format.parse(startDate)
+    val c = Calendar.getInstance()
+    c.setTime(date)
+    c.add(Calendar.DATE, numOfDays)
+    val dt = format.format(c.getTime())
+    var df_mod = df.select(df("Combined_Key"), df(startDate).cast(IntegerType)).orderBy(desc(startDate))
+    val df_temp = df.select(df("Combined_Key").as("_n_"), df(dt).cast(IntegerType)).orderBy(desc(dt))
+    df_mod = df_mod.join(df_temp, df_temp("_n_") === df_mod("Combined_Key"), "inner").drop("_n_")
+    df_mod.withColumn("delta", df_mod(dt) - df_mod(startDate))
+  }
 
 
-  //DO NOT RUN THESE FUNCTIONS
-  /*super expensive and time consuming
+
+  //only works when date is between 1/23/20-5/2/21
+  def growthFactor(df: DataFrame, strDate: String) = {
+    val format = new SimpleDateFormat("M/d/yy")
+    val date = format.parse(strDate)
+    val c = Calendar.getInstance()
+    c.setTime(date)
+    c.add(Calendar.DATE, -1)
+    val dt = format.format(c.getTime())
+    var df_mod = df.select(df("Combined_Key").as("_n_"), df(strDate).cast(IntegerType)).orderBy(desc(strDate))
+    val df_temp = df.select(df("Combined_Key").as("Location"), df(dt).cast(IntegerType)).orderBy(desc(dt))
+    df_mod = df_temp.join(df_mod, df_temp("Location") === df_mod("_n_"), "inner").drop("_n_")
+    df_mod.withColumn("delta", (((df_mod(strDate) / df_mod(dt)) - 1) * 100).cast(DecimalType(8, 2))).na.fill(0)
+  }
+
+  //DO NOT RUN THESE FUNCTIONS on pseudo standalone evironemnt, super expensive and time consuming
+
   def greatestMedianGrowthFactor(df: DataFrame, Country:String,Province:String, dataName:String) ={
     val format = new SimpleDateFormat("M/d/yy")
     val date = format.parse("1/23/20")
@@ -505,6 +566,7 @@ object Runner {
     tempDF.coalesce(1).write.option("header", "true").csv("output/"+Country+"/"+Province+"/"+dataName+"/greatestMedGF.csv")
     greatestMedianGrowthFactor
   }
+
   def greatestAvgGrowthFactor(df: DataFrame, Country:String,Province:String, dataName:String) ={
     val format = new SimpleDateFormat("M/d/yy")
     val date = format.parse("1/23/20")
@@ -530,6 +592,7 @@ object Runner {
     tempDF.coalesce(1).write.csv("output/"+Country+"/"+Province+"/"+dataName+"/greatestAvgGF.csv")
     greatestAvgGrowthFactor
   }
+
   def leastMedianGrowthFactor(df: DataFrame, Country:String,Province:String, dataName:String) ={
     val format = new SimpleDateFormat("M/d/yy")
     val date = format.parse("1/23/20")
@@ -555,6 +618,7 @@ object Runner {
     tempDF.coalesce(1).write.csv("output/"+Country+"/"+Province+"/"+dataName+"/leastMedGF.csv")
     leastMedianGrowthFactor
   }
+
   def leastAvgGrowthFactor(df: DataFrame, Country:String,Province:String, dataName:String) ={
     val format = new SimpleDateFormat("M/d/yy")
     val date = format.parse("1/23/20")
@@ -655,70 +719,6 @@ object Runner {
     var leastAvgDate = ""
     var leastAvgGrowthFactor = 1000000.0
 
-  /**
-    covid_confirmed_US_DB.show()
-    covid_confirmed_DB.show()
-    covid_deaths_DB.show()
-    covid_deaths_US_DB.show()
-    covid_recovered_DB.show()
-   **/
-  // take one of the above five dataframes and create a dataframe where each row has a field containing an array
-  // whose elements are indicative of the day-toi-day increase in values, rather than a historic total for each day
-  // Note that if you are looking at the US in particular, pass true in the second parameter. Otherwise pass false.
-
-  def incrementGenerator(dfx:DataFrame, isUS:Boolean):Unit={
-    var trimmerValue = 0
-    if(isUS)  {trimmerValue = 13}
-    else {trimmerValue = 4}
-
-    val dfxFiller = dfx.na.fill(" ", Seq("*"))
-    val squishColumnsTogether = dfxFiller.withColumn("ClumpRow", expr("concat_ws(',',*)"))
-    val renameAllColumns = squishColumnsTogether.select(col("Country_Region").as("CR"), col("Province_State").as("PS"), col("Lat").as("LAT"), col("Long_").as("LONG"), col("ClumpRow").as("All"))
-    val produceIntArray = udf((a:String) => (a.split(",").drop(trimmerValue).map(x => x.toInt)))
-    val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("All"))).drop(col("All"))
-    dfxWithIntArray.printSchema()
-    dfxWithIntArray.show
-    val offsetIntArray = udf((x:Array[Int]) => 0+:x.dropRight(1))
-    val dfxWithOffset = dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
-    val arrayZipper = udf((m:Array[Int], n:Array[Int]) => (m zip n).toList)
-    val dfxTogether = dfxWithOffset.select("*").withColumn("Yesterday_Today", arrayZipper(col("Daily Tallies"),col("Daily Offset"))).drop(col("Daily Tallies")).drop(col("Daily Offset"))
-    val increment = udf( (p:Array[(Int, Int)]) => p.map(q => q._1-q._2))
-    val dfxIncrement = dfxTogether.select(col("CR"),col("PS"), col("Yesterday_Today")).withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today"))
-    dfxIncrement.show()
-    dfxIncrement.collect()
-    dfxIncrement.collectAsList()
-
-    /*
-    val dfxFiller = dfx.na.fill(" ", Seq("*"))
-    val squishColumnsTogether = dfxFiller.withColumn("ClumpRow", expr("concat_ws(',',*)"))
-    val renameAllColumns = squishColumnsTogether.select(col("Country_Region").as("CR"), col("Province_State").as("PS"), col("Lat").as("LAT"), col("Long_").as("LONG"), col("ClumpRow").as("All"))
-    // Below is a REPL UDF that does the following:
-    //		splits each element such that the string is now an Array of Strings
-    //		drop the first four elements, since they are not numbers
-    //		convert the numbers into integers such that the output is an Array of Integers
-    val produceIntArray = udf((a:String) => (a.split(",").drop(trimmerValue).map(x => x.toInt)))
-    val dfxWithIntArray = renameAllColumns.select("*").withColumn("Daily Tallies", produceIntArray(col("All"))).drop(col("All"))
-    val offsetIntArray = udf((x:Array[Int]) => (0+:x.dropRight(1)))
-    val dfxWithOffset = dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
-    val arrayZipper = udf((m:Array[Int], n:Array[Int]) => m zip n)
-    val dfxTogether = dfxWithOffset.select("*").withColumn("Yesterday_Today", arrayZipper(col("Daily Offset"),col("Daily Tallies")))//.drop(col("Daily Tallies")).drop(col("Daily Offset"))
-    dfxTogether.collectAsList()
-    //val increment = udf( (p:Array[(Int, Int)]) => p.map(q => q._2-q._1)) // <--
-    //val dfxIncrement = dfxTogether.select(col("CR"),col("PS"), col("Yesterday_Today")).withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today"))
-    // val dfxIncrement = dfxTogether.select("*").withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today")).collect
-    //dfxIncrement.printSchema()
-    //val dfxIncrement1 = dfxIncrement.collect
-    //dfxIncrement1.show
-
-    */
-
-  }
-
-
-
-
-
-
     var maxGrowthDate = ""
     var maxGrowthFactor = -1000000.0
     var gFactor = 0.0
@@ -785,5 +785,5 @@ object Runner {
     tempDF = growthFactor(df,minGrowthDate)
     tempDF.coalesce(1).write.csv("output/"+Country+"/"+Province+"/"+dataName+"/minGF.csv")
   }
-  */
+
 }
