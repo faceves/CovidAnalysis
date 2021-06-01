@@ -76,21 +76,6 @@ object Runner {
 
 
 
-    //val stateDF = covid_confirmed_US_DB.select(covid_confirmed_US_DB("Province_State")).distinct()
-    //val stateList = stateDF.collect.map(_ (0)).toList
-    //println(stateList)
-    //stateList.foreach(f=>allGrowthFactorDataPoints(covid_confirmed_US_DB.filter('Province_State===f.toString).na.fill("").filter('Admin2=!="Unassigned"),"USA", f.toString,"Confirmed Cases"))
-    /**
-     * covid_accum_DB.show()
-     * covid_confirmed_US_DB.show()
-     * covid_confirmed_DB.show()
-     * covid_deaths_DB.show()
-     * covid_deaths_US_DB.show()
-     * covid_recovered_DB.show()
-     * */
-
-
-
 
     val firstConfirmedCountries=
       dataCleanseFilter(
@@ -121,72 +106,20 @@ object Runner {
         "Province/State"
       )
 
+
     val accumCountries = attainTargetAccum(covid_accum_DB,"Country/Region")
     val accumUSStates = attainTargetAccum(covid_accum_DB, "Province/State")
 
-    println("Top 10 Most Infected Countries:")
-    accumCountries
-      .orderBy(desc("Total Confirmed"))
-      .select(col("Country/Region"), col("Total Confirmed").as("Most Infected"))
-      .show(10)
-
-    println("Top 10 Least Infected Cpuntries:")
-    accumCountries
-      .orderBy(asc("Total Confirmed"))
-      .select(col("Country/Region"), col("Total Confirmed").as("Least Infected"))
-      .show(10)
-
-    println("Top 10 Most Infected U.S States:")
-    accumUSStates
-      .orderBy(desc("Total Confirmed"))
-      .select(col("Province/State"), col("Total Confirmed").as("Most Infected"))
-      .show(10)
-
-    println("Top 10 Least Infected U.S States:")
-    accumUSStates
-      .orderBy(asc("Total Confirmed"))
-      .select(col("Province/State"), col("Total Confirmed").as("Least Infected"))
-      .show(10)
-
-    firstConfirmedUSStates.show()
-    firstConfirmedCountries.show()
-    firstDeathsCountries.show()
-    firstDeathsUSStates.show()
-
-
-    val firstCountries = firstConfirmedCountries.join(firstDeathsCountries,"Country/Region")
-    val firstCountriesRelationship =
-      firstOccurrRelationship(
-        firstCountries,
-        accumCountries,
-        Seq[String]("Country/Region")
-      )
-
-    val statePopulationDF =
-      dataCleanseFilter(
-        covid_deaths_US_DB.select("Province_State", "Population"),
-        "Province_State"
-      )
-      .groupBy("Province_State")
-      .agg(sum(col("Population").cast(IntegerType)).as("Population"))
-
-    val firstUSStates = firstConfirmedUSStates.join(firstDeathsUSStates,"Province/State")
-    val firstUSStatesRelationship =
-      firstOccurrRelationship(
-        firstUSStates,
-        accumUSStates,
-        Seq[String]("Province/State"),
-        statePopulationDF
-      )
-
-    firstCountriesRelationship.show(100)
-    firstUSStatesRelationship.show(60)
-
-    //spikeAtTarget(covid_accum_DB, "Country/Region", "Brazil", "01/01/2021", 7, 5.0) // Determine whether there is a spike created from some day
-    //latestValuesForAccumulatedTable(covid_accum_DB, "Country/Region", "05/02/2021") //latest 'deaths, confirms, and recoveries' based on input day on Big Set
-    //latestValueForSubTables(covid_deaths_DB, "Country/Region", "5/2/21") //latest 'deaths/confirms/recoveries' based on input day on Sub Sets
-    //latestValueForSubTables(covid_confirmed_DB, "Province/State", "5/2/21")
-      //we should JUST go by country, because all the undocumented provinces/states across countries will get lumped together
+    displayLeastAndMostInfected(accumCountries, accumUSStates)
+    displayFirstOccurenceRelationship(
+      firstConfirmedCountries,
+      firstDeathsCountries,
+      firstConfirmedUSStates,
+      firstDeathsUSStates,
+      accumCountries,
+      accumUSStates,
+      covid_deaths_US_DB
+    )
 
 
     incrementGenerator(covid_confirmed_US_DB, true, spark)
@@ -341,6 +274,27 @@ object Runner {
     firstOccurDF
   }
 
+
+  /**
+   * firstOccurRelationship creates a dataset that attains the first occurence dates of first deaths and first confirmed
+   * cases and compares it to 3 ratios: Case Fatality Ratio, Case Recovered Ratio and Mortality Ratio, to find a relationship
+   * of how reactive/responsive states or countries are according to the timeframe(dates) given by the first confirmed or death case.
+   * Needed the accumulated table of Confirmed, Deaths, and Recovered instances in order to calculate the 3 ratios.
+   * Population is also needed from the time_series_covid_19_deaths_US.csv, so only the two columns of States and Population
+   * are needed to be passed in to be joined.
+   *
+   * Case Fatality Ratio = Total Deaths / Total Confirmed
+   * Case Recovered Ratio = Total Recovered / Total Confirmed
+   * Mortality Rate = Total Deaths / Population
+   * @param firstOccur = The first occurrence dataframe that has the joined DF's from First Deaths and First Confirmed
+   *                   firstOccur dataframes
+   * @param accumDF = The accumulated dataframe that has the summed data of Total Confirmed, Total Deaths, and Total Recovered
+   * @param joinCols = The join columns condition that are required to join the firstOccur and the accumDF
+   * @param populationDF = The dataframe required that contains the States Column with their respective Population Column
+   * @return = Returns a dataframe consisting of the dates of the first occurrences of First Death and First Confirmed with
+   *         the Case Fatality Ratio, Mortality Ratio, and Case Recovered Ratio to : compare amongst other entities, display
+   *         and find a relation revolving around the first occurrence dates.
+   */
   def firstOccurrRelationship(firstOccur :DataFrame, accumDF : DataFrame, joinCols: Seq[String], populationDF: DataFrame = null): DataFrame = {
     val firstJoined = accumDF.join(firstOccur,joinCols,"inner")
 
@@ -475,6 +429,113 @@ object Runner {
     toBeCleaned.where(toBeCleaned(targetCol).isin(targetList:_*))
   }
 
+  /**
+   * Displays the first occurence relationship in a dataset both for US States and Countrie by joining the respective
+   * firstDeaths and firstConfirmed dataframes to pass it into the firstOccurrenceRelation function to return back a
+   * dataset containing the columns to display and find a relationship between the first date and the ratios of Case
+   * Fatality, Case Recovered, and Mortality. Comparison and Analysis between each entity is also possible (US State or
+   * Country).
+   * @param firstConfirmedCountries = first confirmed countries values consisting of the date with its respective confirmed case
+   * @param firstDeathsCountries = first deatgs countries values consisting of the date with its respective deaths case
+   * @param firstConfirmedUSStates = first confirmed US States values consisting of the date with its respective confirmed case
+   * @param firstDeathsUSStates = first deaths countries values consisting of the date with its respective deaths case
+   * @param accumCountries = accumulated values of Total Confirmed, Total Deaths, Total Recovered for Countries
+   * @param accumUSStates = accumulated values of Total Confirmed, Total Deaths, Total Recovered for US States
+   * @param covid_deaths_US_DB = the original source of covid deaths, to be used by passing in only the Population column
+   *                           with its respective Province/State column into the firstOccurenceRelationship for US States.
+   */
+  def displayFirstOccurenceRelationship(
+                                         firstConfirmedCountries: DataFrame,
+                                         firstDeathsCountries: DataFrame,
+                                         firstConfirmedUSStates: DataFrame,
+                                         firstDeathsUSStates: DataFrame,
+                                         accumCountries: DataFrame,
+                                         accumUSStates: DataFrame,
+                                         covid_deaths_US_DB: DataFrame
+                                       ) : Unit = {
+    val firstCountries = firstConfirmedCountries.join(firstDeathsCountries,"Country/Region")
+    val firstCountriesRelationship =
+      firstOccurrRelationship(
+        firstCountries,
+        accumCountries,
+        Seq[String]("Country/Region")
+      )
+
+    //summing all counties into by its US  state.
+    val statePopulationDF =
+      dataCleanseFilter(
+        covid_deaths_US_DB.select("Province_State", "Population"),
+        "Province_State"
+      )
+        .groupBy("Province_State")
+        .agg(sum(col("Population").cast(IntegerType)).as("Population"))
+
+    val firstUSStates = firstConfirmedUSStates.join(firstDeathsUSStates,"Province/State")
+    val firstUSStatesRelationship =
+      firstOccurrRelationship(
+        firstUSStates,
+        accumUSStates,
+        Seq[String]("Province/State"),
+        statePopulationDF
+      )
+
+    //Reordering the columns for display
+    println("FIrst Occurence Relationship for Countries:")
+    firstCountriesRelationship
+      .select(
+        "First Confirmed Date",
+        "First Deaths Date",
+        "Country/Region",
+        "Confirmed",
+        "Deaths",
+        "Case Fatality Ratio",
+        "Case Recovery Ratio"
+      ).show()
+
+    println("FIrst Occurence Relationship for US States:")
+    firstUSStatesRelationship
+      .select(
+        "First Confirmed Date",
+        "First Deaths Date",
+        "Province/State",
+        "Confirmed",
+        "Deaths",
+        "Case Fatality Ratio",
+        "Mortality Ratio",
+        "Case Recovery Ratio"
+      ).show()
+  }
+
+  /**
+   * Displays the Top 10 Most and Least infected countries and US states.
+   * @param accumCountries = accumulated values of Confirmed, Deaths and Recovered for Countries.
+   * @param accumUSStates = accumulated values of Confirmed, Deaths and Recovered for US States.
+   */
+  def displayLeastAndMostInfected(accumCountries : DataFrame, accumUSStates:DataFrame): Unit = {
+    println("Top 10 Most Infected Countries:")
+    accumCountries
+      .orderBy(desc("Total Confirmed"))
+      .select(col("Country/Region"), col("Total Confirmed").as("Infected"))
+      .show(10)
+
+    println("Top 10 Least Infected Cpuntries:")
+    accumCountries
+      .orderBy(asc("Total Confirmed"))
+      .select(col("Country/Region"), col("Total Confirmed").as("Infected"))
+      .show(10)
+
+    println("Top 10 Most Infected U.S States:")
+    accumUSStates
+      .orderBy(desc("Total Confirmed"))
+      .select(col("Province/State"), col("Total Confirmed").as("Infected"))
+      .show(10)
+
+    println("Top 10 Least Infected U.S States:")
+    accumUSStates
+      .orderBy(asc("Total Confirmed"))
+      .select(col("Province/State"), col("Total Confirmed").as("Infected"))
+      .show(10)
+  }
 
   def incrementGenerator(dfx: DataFrame, isUS:Boolean, context:SparkSession): DataFrame = {
     val schemaRetention = dfx.schema
