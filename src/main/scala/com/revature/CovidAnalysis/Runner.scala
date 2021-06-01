@@ -2,6 +2,8 @@ package com.revature.CovidAnalysis
 
 import loadpath.LoadPath
 import org.apache.spark.storage.StorageLevel._
+
+import scala.language.postfixOps
 import org.apache.spark.sql.{Column, Row}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.expressions.Window
@@ -69,20 +71,17 @@ object Runner {
       .load(LoadPath.hdfs_path + "time_series_covid_19_recovered.csv")
       .toDF()
 
-
-
-
     //starting first occurrence relationship
     val firstConfirmedCountries=
       dataCleanseFilter(
         firstOccurrenceCovid19(covid_accum_DB,"Confirmed","Country/Region")
           .select("First Confirmed Date","Country/Region","Confirmed"),
         "Country/Region"
-    )
+      )
 
     val firstConfirmedUSStates =
       dataCleanseFilter(
-        firstOccurrenceCovid19(covid_accum_DB,"Confirmed","Province/State")
+        firstOccurrenceCovid19(covid_accum_DB, "Confirmed", "Province/State")
           .where($"Country/Region" === "US")
           .select("First Confirmed Date","Province/State","Confirmed"),
         "Province/State"
@@ -102,7 +101,7 @@ object Runner {
         "Province/State"
       )
 
-    val accumCountries = attainTargetAccum(covid_accum_DB,"Country/Region")
+    val accumCountries = attainTargetAccum(covid_accum_DB, "Country/Region")
     val accumUSStates = attainTargetAccum(covid_accum_DB, "Province/State")
 
 
@@ -125,11 +124,19 @@ object Runner {
     println("Increment Table")
     val xyz = incrementGenerator(covid_confirmed_US_DB, true, spark)
     xyz.show(1)
-
     println("Show the Percent Change Between Days in Historic Data")
     percentChangeGenerator(covid_confirmed_US_DB, true, spark).show(1)
-
     println("Show the Percent Change Between Days in Incremental Data")
+    percentChangeGenerator(xyz, true, spark).show(1)
+
+
+    val abc = incrementGenerator(covid_confirmed_US_DB, true, spark)
+    val mno = localSpikeGenerator(abc, true, spark)
+    mno.show(false)
+    val efg = incrementGenerator(covid_confirmed_DB, false, spark)
+    val qrs = localSpikeGenerator(efg, true, spark)
+    qrs.show
+
     percentChangeGenerator(xyz,true, spark).show(1)
 
 
@@ -137,14 +144,14 @@ object Runner {
   }
 
 
-
   /**
    * First occurence of the occurence type being sought after. Most importantly is including the date of the occurence
    * and is ordered in ascending order.
-   * @param covid19AccumDB = the Covid_19_DB dataframe that contains the loaded data from the csv file
-   * @param occurTypeCol = the occurence type consisting of: Confirmed,Deaths, or Recovered.
-   * @param partitionByCol = the entity that we are trying to gain the occurence from, either Country or States. Could be
-   *                       expanded to Continents later.
+   *
+   * @param covid19AccumDB    = the Covid_19_DB dataframe that contains the loaded data from the csv file
+   * @param occurTypeCol      = the occurence type consisting of: Confirmed,Deaths, or Recovered.
+   * @param partitionByCol    = the entity that we are trying to gain the occurence from, either Country or States. Could be
+   *                          expanded to Continents later.
    * @param partitionByTarget = the target to better filter out results. This target only includes a subset filter based on
    *                          the partitionByCol.
    *                          e.g: target = San Diego County , partitionByCol = State/Province
@@ -235,20 +242,20 @@ object Runner {
   }
 
   /**
-   *  Returns the accumulated values from the Confirmed,Deaths and Recovered according to the targetColumn entity.
+   * Returns the accumulated values from the Confirmed,Deaths and Recovered according to the targetColumn entity.
    * side note:
    * Using groupBy + agg is not ideal, ... for RDD's, it does not do map side reduce and requires unnecessary shuffling, but because it is a
    * Dataset[Row], it uses the Catalyst Optimizer to optimize it to be the same as the RDD reduceByKey function.
    *
    * @param covid19Accum = only the Accum DF
-   * @param targetCol = is either Country or State
-   * @param target = target is only a subset of targetCol, the country or state/counties to filter the column by, if given
+   * @param targetCol    = is either Country or State
+   * @param target       = target is only a subset of targetCol, the country or state/counties to filter the column by, if given
    * @return = Dataframe accumulations
    */
   def attainTargetAccum(covid19Accum: DataFrame, targetCol: String, target: String = ""): DataFrame = {
     val accumDF: DataFrame =
       dataCleanseFilter(
-        covid19Accum.select(targetCol,"Confirmed","Deaths","Recovered"),
+        covid19Accum.select(targetCol, "Confirmed", "Deaths", "Recovered"),
         targetCol,
         target
       )
@@ -259,24 +266,25 @@ object Runner {
           sum("Recovered").as("Total Recovered"))
         .orderBy(targetCol)
         .cache()
-    if(target != "")
-      return accumDF.where(accumDF(targetCol).like("%"+target))
+    if (target != "")
+      return accumDF.where(accumDF(targetCol).like("%" + target))
     accumDF
   }
 
   /**
-   *  dataCleanseFilter is a function that filters out all values that are not what are to be targeting in the normal format and in essence
-   *  makes sure that the dataframe being returned is exactly what the target column is, Countries or States. At this stage
-   *  of development it only accepts states from the U.S but can be expanded on to be acceptable from states from global countries.
-   *  The isUSFile is a flag, because of the decision to not fully data clean or format the original dataframe
-   *  once loaded from CSV, this accounts for the time_series_US csv files that have their column with underscores instead
-   *  of /.
+   * dataCleanseFilter is a function that filters out all values that are not what are to be targeting in the normal format and in essence
+   * makes sure that the dataframe being returned is exactly what the target column is, Countries or States. At this stage
+   * of development it only accepts states from the U.S but can be expanded on to be acceptable from states from global countries.
+   * The isUSFile is a flag, because of the decision to not fully data clean or format the original dataframe
+   * once loaded from CSV, this accounts for the time_series_US csv files that have their column with underscores instead
+   * of /.
+   *
    * @param toBeCleaned Dataframe to be cleaned while filtered
-   * @param targetCol Column that is being targeted to get the
-   * @param target to be expanded on later => states/provinces from countries other then U.S or U.S State counties.
+   * @param targetCol   Column that is being targeted to get the
+   * @param target      to be expanded on later => states/provinces from countries other then U.S or U.S State counties.
    * @return
    */
-  def dataCleanseFilter(toBeCleaned:DataFrame, targetCol: String, target: String = ""): DataFrame = {
+  def dataCleanseFilter(toBeCleaned: DataFrame, targetCol: String, target: String = ""): DataFrame = {
     val statesUS: List[String] = List[String]("Alabama", "Alaska", "American Samoa", "Arizona", "Arkansas", "California",
       "Colorado", "Connecticut", "Delaware", "District of Columbia", "Florida", "Georgia", "Guam", "Hawaii",
       "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts",
@@ -321,13 +329,13 @@ object Runner {
       "Yemen", "Yugoslavia", "Zaire", "Zambia", "Zimbabwe")
     var targetList: List[String] = List[String]()
 
-    if(targetCol == "Province/State" || targetCol == "Province_State")
+    if (targetCol == "Province/State" || targetCol == "Province_State")
       targetList = statesUS
     else
       targetList = countries
 
 
-    toBeCleaned.where(toBeCleaned(targetCol).isin(targetList:_*))
+    toBeCleaned.where(toBeCleaned(targetCol).isin(targetList: _*))
   }
 
   /**
@@ -443,7 +451,7 @@ object Runner {
       .show(10)
   }
 
-  def incrementGenerator(dfx: DataFrame, isUS:Boolean, context:SparkSession): DataFrame = {
+  def incrementGenerator(dfx: DataFrame, isUS: Boolean, context: SparkSession): DataFrame = {
     val schemaRetention = dfx.schema
     val trimmerValue = if (isUS) 11 else 4
     val dfxFiller = dfx.na.fill(" ", Seq("*"))
@@ -465,7 +473,7 @@ object Runner {
     outputDataFrame
   }
 
-  def percentChangeGenerator(dfx: DataFrame, isUS:Boolean, context:SparkSession): DataFrame = {
+  def percentChangeGenerator(dfx: DataFrame, isUS: Boolean, context: SparkSession): DataFrame = {
     val schemaRetention = dfx.schema
     val trimmerValue = if (isUS) 11 else 4
     val dfxFiller = dfx.na.fill(" ", Seq("*"))
@@ -478,7 +486,7 @@ object Runner {
     val dfxWithOffset = dfxWithIntArray.select("*").withColumn("Daily Offset", offsetIntArray(col("Daily Tallies")))
     val arrayZipper = udf((m: Seq[Int], n: Seq[Int]) => (m zip n).toList)
     val dfxTogether = dfxWithOffset.select("*").withColumn("Yesterday_Today", arrayZipper(col("Daily Offset"), col("Daily Tallies"))).drop(col("Daily Tallies")).drop(col("Daily Offset"))
-    val increment = udf((p: Seq[Row]) => p.map(q => if (q.getInt(0) != 0) BigDecimal(q.getInt(1).toDouble/q.getInt(0).toDouble-1).setScale(2, BigDecimal.RoundingMode.HALF_UP).toString else BigDecimal(q.getInt(1).toDouble/1.0).setScale(2,BigDecimal.RoundingMode.HALF_UP).toString()))
+    val increment = udf((p: Seq[Row]) => p.map(q => if (q.getInt(0) != 0) BigDecimal(q.getInt(1).toDouble / q.getInt(0).toDouble - 1).setScale(3, BigDecimal.RoundingMode.HALF_UP).toString else "0.000"))
     val dfxIncrement = dfxTogether.select("*").withColumn("Increment", increment(col("Yesterday_Today"))).drop(col("Yesterday_Today"))
     val lengthOfArray = dfxIncrement.withColumn("IncrementExpansion", org.apache.spark.sql.functions.size(col("Increment")))
       .selectExpr("max(IncrementExpansion)").head().getInt(0)
@@ -486,6 +494,36 @@ object Runner {
     val outputDataFrame = context.createDataFrame(dfxExpanded.rdd, schemaRetention)
     outputDataFrame
   }
+
+
+  //Desires a DataFrame as an output from the incrementGenerator method, can technically take Historic Data
+  def localSpikeGenerator(dfx:DataFrame, isUS:Boolean, context:SparkSession):DataFrame={
+    val schemaRetention = dfx.schema
+    val trimmerValue = if (isUS) 11 else 4
+    val dfxFiller = dfx.na.fill(" ", Seq("*"))
+    val squishColumnsTogether = dfxFiller.withColumn("ClumpRow", expr("concat_ws('~',*)"))
+    val identityColumns = squishColumnsTogether.columns.filter(b => b.toUpperCase().head >= 'A' && b.toUpperCase.head <= 'Z')
+    val refactorColumnSet = squishColumnsTogether.select(identityColumns.head, identityColumns.tail: _*)
+    val produceIntArray = udf((a: String) => a.split("~").drop(trimmerValue).map(x => x.toInt))
+    val dfxWithIntArray = refactorColumnSet.select("*")
+      .withColumn("Increments Ordered by Date", produceIntArray(col("ClumpRow")))
+      .drop(col("ClumpRow"))
+    val ratioComparedToMax = udf((asd:Seq[Int]) => asd.map(jkl => if (asd.max != 0) (jkl/asd.max).toDouble else 0.0))
+    val dfxWithMax = dfxWithIntArray.select("*")
+      .withColumn("Ratio to Max", ratioComparedToMax(col("Increments Ordered by Date")))
+    val peakFilter = udf((xyz:Seq[Double]) => xyz.filter(a => if (xyz.max != 0) a >= 0.95*xyz.max else false) )
+    val peakCounter = udf((abc:Seq[Double])=> abc.size)
+    val peakValue = udf((efg:Seq[Double]) => efg.max)
+    val dfxHighDays = dfxWithMax.select("*")
+      .withColumn("List of High Days", peakFilter(col("Ratio to Max")))
+      .withColumn("Count of High Days", peakCounter(col("List of High Days")))
+      .withColumn("Highest Daily Value", peakValue(col("Increments Ordered by Date")))
+    if (isUS) dfxHighDays.select("Combined Key", "Count of High Days", "Highest Daily Value")
+      .orderBy(desc("Count of High Days"), desc("Highest Daily Value"))
+    else dfxHighDays.select(col("Province/State"), col("Country/Region"),col("Count of High Days"), col("Highest Daily Value"))
+      .orderBy(desc("Count of High Days"), desc("Highest Daily Value"))
+  }
+
 
   //Modification on Tim's Change Over Time Method, to output different dates based on input dates and spread
   def twoWeekCatcher(dfx: DataFrame, start: String, spread: Int): String = {
