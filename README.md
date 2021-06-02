@@ -22,13 +22,15 @@ List of features ready and TODO's for future development.
 
 ### Features:
 - First Occur Relationship
-- \George Feature/
+- Local Spike Instance Detector
 - \Tim Feature/
 
 ### TODO:
 - First Occur improvements for future
   - Optimizing by implementing a broadcast join for joins.
-- \George feature improvents for future/
+- Local Spike improvements for future
+  - include an iterator whose index values contain dates of spikes
+  - develop a more independent schema assessment
 - \Tim feature improvements for future/  
 
 ## Getting Started
