@@ -1,14 +1,14 @@
 # Project 2: CovidAnalysis
 
 
-#Project Description
+## Project Description
 Create a Spark Application that process Covid data. Your project should involve some 
 analysis of covid data (Every concept of spark from rdd, dataframes, sql, dataset and 
 optimization methods should be included, persistence also). The final expected output 
 is different trends that you have observed as part of data collectivley and how can WHO
 make use of these trends to make some useful decisions.
 
-#Technology Stack
+## Technology Stack
 - Apache Spark 3.1.1
 - Spark SQL
 - YARN
@@ -17,21 +17,21 @@ make use of these trends to make some useful decisions.
 - Git + GitHub
 
 
-#Features
+## Features
 List of features ready and TODO's for future development.
 
-###Features:
+### Features:
 - First Occur Relationship
 - \George Feature/
 - \Tim Feature/
 
-###TODO:
+### TODO:
 - First Occur improvements for future
   - Optimizing by implementing a broadcast join for joins.
 - \George feature improvents for future/
 - \Tim feature improvements for future/  
 
-#Getting Started
+## Getting Started
 GitHub clone URL: https://github.com/faceves/CovidAnalysis.git
 
 - Enable WSL and update to WSL2 on Windows 10 
@@ -58,7 +58,7 @@ GitHub clone URL: https://github.com/faceves/CovidAnalysis.git
     - hdfs dfs -cp /mnt/<path to files>/time_series_covid_19_recovered.csv /user/<username>/project2/Datasetstime_series_covid_19_recovered.csv 
 - Clone project into IntelliJ
     
-#Contributors
+## Contributors
 - Francisco Aceves
   - https://github.com/faceves
 - George Kotzabassis
@@ -66,4 +66,4 @@ GitHub clone URL: https://github.com/faceves/CovidAnalysis.git
 - Timothy Miller
   - https://github.com/Tim-J-Miller
     
-#License
+## License
