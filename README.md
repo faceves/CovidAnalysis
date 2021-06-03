@@ -23,7 +23,7 @@ List of features ready and TODO's for future development.
 ### Features:
 - First Occur Relationship
 - Local Spike Instance Detector
-- \Tim Feature/
+- Growth factor aggregate data
 
 ### TODO:
 - First Occur improvements for future
@@ -31,7 +31,10 @@ List of features ready and TODO's for future development.
 - Local Spike improvements for future
   - include an iterator whose index values contain dates of spikes
   - develop a more independent schema assessment
-- \Tim feature improvements for future/  
+- Growth factor improvements for future
+  - optimize the algorithm for calculating aggregate data
+  - expand the algorithm to calculate more data points
+  - run the algorithm on the rest of the dataset
 
 ## Getting Started
 GitHub clone URL: https://github.com/faceves/CovidAnalysis.git
