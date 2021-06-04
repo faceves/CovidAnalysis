@@ -1,7 +1,7 @@
 # Project 2: CovidAnalysis
 
-
 #Project Description
+
 Create a Spark Application that process Covid data. Your project should involve some 
 analysis of covid data (Every concept of spark from rdd, dataframes, sql, dataset and 
 optimization methods should be included, persistence also). The final expected output 
