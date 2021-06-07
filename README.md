@@ -1,6 +1,8 @@
 # Project 2: CovidAnalysis
 
-#Project Description
+
+
+## Project Description
 
 Create a Spark Application that process Covid data. Your project should involve some 
 analysis of covid data (Every concept of spark from rdd, dataframes, sql, dataset and 
@@ -8,7 +10,7 @@ optimization methods should be included, persistence also). The final expected o
 is different trends that you have observed as part of data collectivley and how can WHO
 make use of these trends to make some useful decisions.
 
-#Technology Stack
+## Technology Stack
 - Apache Spark 3.1.1
 - Spark SQL
 - YARN
@@ -17,21 +19,36 @@ make use of these trends to make some useful decisions.
 - Git + GitHub
 
 
-#Features
+## Features
 List of features ready and TODO's for future development.
 
-###Features:
-- First Occur Relationship
-- \George Feature/
-- \Tim Feature/
+### Features:
+- First Occurrence Relationship
+  - Constructed a Dataset to display a relationship between the time frame of the first occurrence of confirmed and 
+    death cases to the: Case Fatality Ratio, Case Recovery Ratio and Mortality Ratio.
+- Display Top 10 Most and Least Infected Countries and U.S. States. 
+- Local Spike Instance Detector
+- Growth factor aggregate data
 
-###TODO:
-- First Occur improvements for future
+### TODO:
+- First Occurrence Relationship improvements for future
   - Optimizing by implementing a broadcast join for joins.
-- \George feature improvents for future/
-- \Tim feature improvements for future/  
+  - displayFirstOccurrenceRelationship should be made more loosely coupled and modular, it creates dataframes within 
+    the function that can possibly be used outside of the functions scope. 
+- Local Spike improvements for future
+  - include an iterator whose index values contain dates of spikes
+  - develop a more independent schema assessment
+- Growth factor improvements for future
+  - optimize the algorithm for calculating aggregate data
+  - expand the algorithm to calculate more data points
+  - run the algorithm on the rest of the dataset
+  
+- dataCleansFilter function
+  - More robust to accept different states across different Countries other than U.S.
+  - More robust pattern matching for Countries and States/Provinces
+- Reevaluate on adhoc basis with covid_19_data.csv, possibly make it uniform when loading in.
 
-#Getting Started
+## Getting Started
 GitHub clone URL: https://github.com/faceves/CovidAnalysis.git
 
 - Enable WSL and update to WSL2 on Windows 10 
@@ -58,7 +75,7 @@ GitHub clone URL: https://github.com/faceves/CovidAnalysis.git
     - hdfs dfs -cp /mnt/<path to files>/time_series_covid_19_recovered.csv /user/<username>/project2/Datasetstime_series_covid_19_recovered.csv 
 - Clone project into IntelliJ
     
-#Contributors
+## Contributors
 - Francisco Aceves
   - https://github.com/faceves
 - George Kotzabassis
@@ -66,4 +83,4 @@ GitHub clone URL: https://github.com/faceves/CovidAnalysis.git
 - Timothy Miller
   - https://github.com/Tim-J-Miller
     
-#License
+## License
