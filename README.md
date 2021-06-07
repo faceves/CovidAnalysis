@@ -43,7 +43,7 @@ List of features ready and TODO's for future development.
   - expand the algorithm to calculate more data points
   - run the algorithm on the rest of the dataset
   
-- dataCleansFilter function
+- dataCleanseFilter function
   - More robust to accept different states across different Countries other than U.S.
   - More robust pattern matching for Countries and States/Provinces
 - Reevaluate on adhoc basis with covid_19_data.csv, possibly make it uniform when loading in.
